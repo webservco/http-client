@@ -1,5 +1,5 @@
-# webservco/component-skeleton
+# webservco/http-client
 
-Project skeleton / project starter.
+A PHP component/library.
 
 ---
