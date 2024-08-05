@@ -21,10 +21,12 @@ use function curl_error;
 use function curl_getinfo;
 use function curl_setopt;
 use function curl_setopt_array;
+use function fclose;
 use function fopen;
 use function implode;
 use function is_resource;
 use function is_string;
+use function rewind;
 use function sprintf;
 use function stream_get_contents;
 
@@ -113,7 +115,9 @@ abstract class AbstractCurlService implements CurlServiceInterface
         if (!array_key_exists($handleIdentifier, $this->debugStderr)) {
             throw new ClientException('Error retrieving debug output location.');
         }
+        rewind($this->debugStderr[$handleIdentifier]);
         $stderr = stream_get_contents($this->debugStderr[$handleIdentifier]);
+        fclose($this->debugStderr[$handleIdentifier]);
         if ($stderr === false) {
             throw new ClientException('Error retrieving debug output data.');
         }
