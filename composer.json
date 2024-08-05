@@ -25,7 +25,9 @@
     "license" : "MIT",
     "name" : "webservco/http-client",
     "require": {
-        "php" : "^8.3"
+        "php" : "^8.3",
+        "psr/http-client": "^1",
+        "psr/http-factory": "^1"
     },
     "require-dev": {
         "pds/skeleton": "^1",
