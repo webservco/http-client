@@ -9,6 +9,7 @@ A minimalist PHP HTTP Client implementation using cURL.
 - `ext-curl`
 - `psr/http-client`
 - `psr/http-factory`
+- `webservco/log`
 
 ---
 
@@ -115,6 +116,13 @@ Dependencies: any PSR-17 implementation can be used.
 ```php
 // \WebServCo\Http\Client\Contract\Service\cURL\CurlServiceInterface
 $curlService = new CurlService(
+    // \WebServCo\Http\Client\DataTransfer\CurlServiceConfiguration
+    new CurlServiceConfiguration(
+        // enableDebugMode
+        true
+    ),
+    // \WebServCo\Log\Contract\LoggerFactoryInterface
+    new ContextFileLoggerFactory(sprintf('%svar/log', $projectPath)),
     // PSR-17: \Psr\Http\Message\ResponseFactoryInterface
     $responseFactory,
     // PSR-17: \Psr\Http\Message\StreamFactoryInterface

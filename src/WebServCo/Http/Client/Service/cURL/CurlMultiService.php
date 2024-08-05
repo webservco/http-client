@@ -36,6 +36,10 @@ final class CurlMultiService implements CurlMultiServiceInterface
 
     public function cleanup(): bool
     {
+        if ($this->curlService->getConfiguration()->enableDebugMode) {
+            $this->curlService->getLogger(null)->debug(__FUNCTION__);
+        }
+
         // Reset.
         $this->curlHandles = [];
 
@@ -46,6 +50,10 @@ final class CurlMultiService implements CurlMultiServiceInterface
 
     public function createHandle(RequestInterface $request): string
     {
+        if ($this->curlService->getConfiguration()->enableDebugMode) {
+            $this->curlService->getLogger(null)->debug(__FUNCTION__);
+        }
+
         if ($this->curlMultiHandle === null) {
             /**
              * Create the multiple cURL handle.
@@ -67,6 +75,10 @@ final class CurlMultiService implements CurlMultiServiceInterface
 
     public function executeSessions(): bool
     {
+        if ($this->curlService->getConfiguration()->enableDebugMode) {
+            $this->curlService->getLogger(null)->debug(__FUNCTION__);
+        }
+
         // Validate
         if ($this->curlMultiHandle === null) {
             throw new ClientException('Multi handle not initialized.');
@@ -93,6 +105,10 @@ final class CurlMultiService implements CurlMultiServiceInterface
 
     public function getResponse(string $handleIdentifier): ResponseInterface
     {
+        if ($this->curlService->getConfiguration()->enableDebugMode) {
+            $this->curlService->getLogger(null)->debug(__FUNCTION__);
+        }
+
         // Validate
         if ($this->curlMultiHandle === null) {
             throw new ClientException('Multi handle not initialized.');
@@ -121,6 +137,10 @@ final class CurlMultiService implements CurlMultiServiceInterface
      */
     public function iterateResponse(): Generator
     {
+        if ($this->curlService->getConfiguration()->enableDebugMode) {
+            $this->curlService->getLogger(null)->debug(__FUNCTION__);
+        }
+
         foreach (array_keys($this->curlHandles) as $handleIdentifier) {
             yield $this->getResponse($handleIdentifier);
         }

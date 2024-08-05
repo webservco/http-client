@@ -7,6 +7,8 @@ namespace WebServCo\Http\Client\Contract\Service\cURL;
 use CurlHandle;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Log\LoggerInterface;
+use WebServCo\Http\Client\DataTransfer\CurlServiceConfiguration;
 
 interface CurlServiceInterface
 {
@@ -23,11 +25,18 @@ interface CurlServiceInterface
      */
     public function executeCurlSession(CurlHandle $curlHandle): ?string;
 
+    public function getConfiguration(): CurlServiceConfiguration;
+
     /**
      * Get identifier for cURL handle.
      * Use case: key for headers array.
      */
     public function getHandleIdentifier(CurlHandle $curlHandle): string;
+
+    /**
+     * Get logger for specific cURL handle.
+     */
+    public function getLogger(?CurlHandle $curlHandle): LoggerInterface;
 
     /**
      * Get response object.

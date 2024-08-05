@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace WebServCo\Http\Client\Service\cURL;
 
 use CurlHandle;
+use DateTimeImmutable;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
+use Throwable;
 use WebServCo\Http\Client\Contract\Service\cURL\CurlServiceInterface;
+use WebServCo\Http\Client\DataTransfer\CurlServiceConfiguration;
 use WebServCo\Http\Client\Exception\ClientException;
+use WebServCo\Log\Contract\LoggerFactoryInterface;
 
 use function array_key_exists;
 use function curl_errno;
@@ -40,6 +45,7 @@ use const CURLOPT_HTTPHEADER;
 use const CURLOPT_RETURNTRANSFER;
 use const CURLOPT_TIMEOUT;
 use const CURLOPT_URL;
+use const DIRECTORY_SEPARATOR;
 
 /**
  * cURL service.
@@ -51,6 +57,13 @@ use const CURLOPT_URL;
 final class CurlService implements CurlServiceInterface
 {
     /**
+     * List of loggers, by cURL handle.
+     *
+     * @var array<string,\Psr\Log\LoggerInterface> $loggers
+     */
+    private array $loggers = [];
+
+    /**
      * Response headers, by cURL handle.
      *
      * Populated by the CURLOPT_HEADERFUNCTION callback.
@@ -60,11 +73,13 @@ final class CurlService implements CurlServiceInterface
      * - key: header name
      * - value: array of header values;
      *
-     * @var array<string,array<string,array<string>>>
+     * @var array<string,array<string,array<string>>> $responseHeaders
      */
     private array $responseHeaders = [];
 
     public function __construct(
+        private CurlServiceConfiguration $configuration,
+        private LoggerFactoryInterface $loggerFactory,
         private ResponseFactoryInterface $responseFactory,
         private StreamFactoryInterface $streamFactory,
     ) {
@@ -75,15 +90,29 @@ final class CurlService implements CurlServiceInterface
      */
     public function createHandle(RequestInterface $request): CurlHandle
     {
-        $curlHandle = curl_init();
-        if (!$curlHandle instanceof CurlHandle) {
-            throw new ClientException('Error initializing cURL session.');
+        try {
+            $curlHandle = curl_init();
+            if (!$curlHandle instanceof CurlHandle) {
+                throw new ClientException('Error initializing cURL session.');
+            }
+
+            $curlHandle = $this->setRequestOptions($curlHandle, $request);
+            $curlHandle = $this->setRequestHeaders($curlHandle, $request);
+
+            if ($this->configuration->enableDebugMode) {
+                $this->getLogger($curlHandle)->debug('Handle created.');
+            }
+
+            return $curlHandle;
+        } catch (Throwable $throwable) {
+            /**
+             * Log error.
+             * Since most likely there is no handle, we need to use a general log.
+             */
+            $this->logThrowable(null, $throwable);
+
+            throw $throwable;
         }
-
-        $curlHandle = $this->setRequestOptions($curlHandle, $request);
-        $curlHandle = $this->setRequestHeaders($curlHandle, $request);
-
-        return $curlHandle;
     }
 
     /**
@@ -91,29 +120,48 @@ final class CurlService implements CurlServiceInterface
      */
     public function executeCurlSession(CurlHandle $curlHandle): ?string
     {
-        /**
-         * "Execute the given cURL session."
-         * "This function should be called after initializing a cURL session
-         * and all the options for the session are set."
-         * "Returns true on success or false on failure.
-         * However, if the CURLOPT_RETURNTRANSFER option is set,
-         * it will return the result on success, false on failure."
-         */
-        $responseContent = curl_exec($curlHandle);
+        try {
+            if ($this->configuration->enableDebugMode) {
+                $this->getLogger($curlHandle)->debug('Executing session.');
+            }
 
-        if (!is_string($responseContent)) {
             /**
-             * We only work with CURLOPT_RETURNTRANSFER, so string or error.
-             *
-             * Note: because this is a minimal, separate method that may not be called,
-             * throwing an exception here will not have detailed information about the actual error.
-             * Instead, we return null, and error checking will be performed in the getResponse method.
-             * Alternatively, null value can be checked by consumer.
+             * "Execute the given cURL session."
+             * "This function should be called after initializing a cURL session
+             * and all the options for the session are set."
+             * "Returns true on success or false on failure.
+             * However, if the CURLOPT_RETURNTRANSFER option is set,
+             * it will return the result on success, false on failure."
              */
-            return null;
-        }
+            $responseContent = curl_exec($curlHandle);
 
-        return $responseContent;
+            if ($this->configuration->enableDebugMode) {
+                $this->getLogger($curlHandle)->debug('Session executed.');
+            }
+
+            if (!is_string($responseContent)) {
+                /**
+                 * We only work with CURLOPT_RETURNTRANSFER, so string or error.
+                 *
+                 * Note: because this is a minimal, separate method that may not be called,
+                 * throwing an exception here will not have detailed information about the actual error.
+                 * Instead, we return null, and error checking will be performed in the getResponse method.
+                 * Alternatively, null value can be checked by consumer.
+                 */
+                return null;
+            }
+
+            return $responseContent;
+        } catch (Throwable $throwable) {
+            $this->logThrowable($curlHandle, $throwable);
+
+            throw $throwable;
+        }
+    }
+
+    public function getConfiguration(): CurlServiceConfiguration
+    {
+        return $this->configuration;
     }
 
     /**
@@ -135,42 +183,67 @@ final class CurlService implements CurlServiceInterface
     }
 
     /**
+     * Get logger for specific cURL handle.
+     */
+    public function getLogger(?CurlHandle $curlHandle): LoggerInterface
+    {
+        $handleIdentifier = $curlHandle !== null
+            ? $this->getHandleIdentifier($curlHandle)
+            : 'http-client';
+        if (!array_key_exists($handleIdentifier, $this->loggers)) {
+            $this->loggers[$handleIdentifier] = $this->loggerFactory->createLogger(
+                /**
+                 * Unorthodox: use a path (http-client/time/handleIdentifier) as channel.
+                 */
+                sprintf(
+                    '%s%s%s%s%s',
+                    'http-client',
+                    DIRECTORY_SEPARATOR,
+                    // Use only up to minutes, as requests may spread across seconds
+                    (new DateTimeImmutable())->format('Ymd.Hi'),
+                    DIRECTORY_SEPARATOR,
+                    $handleIdentifier,
+                ),
+            );
+        }
+
+        return $this->loggers[$handleIdentifier];
+    }
+
+    /**
      * @see interface method DockBlock
      */
     public function getResponse(CurlHandle $curlHandle, ?string $responseContent): ResponseInterface
     {
-        // Check for errors.
-        $this->handleResponseError($curlHandle);
-
-        // Get status.
-        $responseCode = $this->getResponseCode($curlHandle);
-
-        /**
-         * Response content must be a string.
-         * Even in the event of a 204 response, and empty string is used.
-         * Parameter is nullable in order to avoid extra checks in the consumers.
-         * For example curl_multi_getcontent return is nullable.
-         */
-        if (!is_string($responseContent)) {
-            throw new ClientException(
-                'Response content not set. Session not executed, or CURLOPT_RETURNTRANSFER not set.',
-            );
+        if ($this->configuration->enableDebugMode) {
+            $this->getLogger($curlHandle)->debug('Get response.');
         }
 
-        // Create response.
-        $response = $this->responseFactory->createResponse($responseCode);
+        try {
+            // Check for errors.
+            $this->handleResponseError($curlHandle);
 
-        // Add headers.
-        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
-        foreach ($this->responseHeaders[$handleIdentifier] as $name => $values) {
-            $response = $response->withHeader($name, implode(', ', $values));
-        }
-        // Add optional body.
-        if ($responseContent !== '') {
-            $response = $response->withBody($this->streamFactory->createStream($responseContent));
-        }
+            // Get status.
+            $responseCode = $this->getResponseCode($curlHandle);
 
-        return $response;
+            if ($this->configuration->enableDebugMode) {
+                $this->getLogger($curlHandle)->debug(sprintf('Response code: %d.', $responseCode));
+            }
+
+            // Create response.
+            $response = $this->responseFactory->createResponse($responseCode);
+
+            // Add headers.
+            $response = $this->setResponseHeaders($curlHandle, $response);
+            // Add optional body.
+            $response = $this->setResponseBody($response, $responseContent);
+
+            return $response;
+        } catch (Throwable $throwable) {
+            $this->logThrowable($curlHandle, $throwable);
+
+            throw $throwable;
+        }
     }
 
     /**
@@ -253,6 +326,16 @@ final class CurlService implements CurlServiceInterface
         );
     }
 
+    private function logThrowable(?CurlHandle $curlHandle, Throwable $throwable): bool
+    {
+        $this->getLogger($curlHandle)->error(
+            sprintf('Error: "%s"', $throwable->getMessage()),
+            [$throwable],
+        );
+
+        return true;
+    }
+
     /**
      * Set the request headers to the cURL handle.
      */
@@ -328,5 +411,36 @@ final class CurlService implements CurlServiceInterface
         // ? consider: v13 "skipSslVerification"
 
         return $curlHandle;
+    }
+
+    private function setResponseBody(ResponseInterface $response, ?string $responseContent): ResponseInterface
+    {
+        /**
+         * Response content must be a string.
+         * Even in the event of a 204 response, and empty string is used.
+         * Parameter is nullable in order to avoid extra checks in the consumers.
+         * For example curl_multi_getcontent return is nullable.
+         */
+        if (!is_string($responseContent)) {
+            throw new ClientException(
+                'Response content not set. Session not executed, or CURLOPT_RETURNTRANSFER not set.',
+            );
+        }
+
+        if ($responseContent !== '') {
+            $response = $response->withBody($this->streamFactory->createStream($responseContent));
+        }
+
+        return $response;
+    }
+
+    private function setResponseHeaders(CurlHandle $curlHandle, ResponseInterface $response): ResponseInterface
+    {
+        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
+        foreach ($this->responseHeaders[$handleIdentifier] as $name => $values) {
+            $response = $response->withHeader($name, implode(', ', $values));
+        }
+
+        return $response;
     }
 }
