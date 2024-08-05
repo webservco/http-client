@@ -239,8 +239,6 @@ final class CurlService implements CurlServiceInterface
      *
      * If session is executed and contains errors,
      * this creates an Exception object that can be thrown when response is accessed.
-     *
-     * @todo ? should this be changed to handle... and throw directly (consider psr/multi use cases) ?
      */
     private function handleResponseError(CurlHandle $curlHandle): null
     {
