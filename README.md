@@ -6,6 +6,7 @@ A minimalist PHP HTTP Client implementation using cURL.
 
 ## Dependencies
 
+- `ext-curl`
 - `psr/http-client`
 - `psr/http-factory`
 
