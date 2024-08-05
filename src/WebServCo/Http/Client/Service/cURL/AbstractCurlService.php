@@ -181,7 +181,7 @@ abstract class AbstractCurlService implements CurlServiceInterface
     {
         $this->getLogger($curlHandle)->error(
             sprintf('Error: "%s"', $throwable->getMessage()),
-            [$throwable],
+            ['throwable' => $throwable],
         );
 
         return true;
