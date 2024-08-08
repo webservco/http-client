@@ -243,13 +243,13 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
                  */
                 CURLOPT_HEADERFUNCTION => [$this, 'headerCallback'],
                 // "The number of seconds to wait while trying to connect. Use 0 to wait indefinitely."
-                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_CONNECTTIMEOUT => $this->configuration->timeout,
                 // "true to follow any "Location: " header that the server sends as part of the HTTP header."
                 CURLOPT_FOLLOWLOCATION => true,
                 // "true to include the header in the output."
                 CURLOPT_HEADER => false,
                 // "The maximum number of seconds to allow cURL functions to execute."
-                CURLOPT_TIMEOUT => 3,
+                CURLOPT_TIMEOUT => $this->configuration->timeout,
                 // "The URL to fetch. This can also be set when initializing a session with curl_init()."
                 CURLOPT_URL => $request->getUri()->__toString(),
             ],
