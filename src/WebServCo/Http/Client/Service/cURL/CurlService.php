@@ -176,7 +176,13 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
 
         $response = null;
         try {
-            // Check for errors.
+            /**
+             * Check for errors.
+             *
+             * Note: this has no effect in multi handle context.
+             * Instead, there are extra checks in the CurlMultiService part,
+             * so make sure to use that service if working with multi handles.
+             */
             $this->handleResponseError($curlHandle);
 
             // Get status.
@@ -215,7 +221,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
          * "It is important to note that the callback is invoked
          * for the headers of all responses received after initiating a request and not just the final response."
          */
-        /** @todo handle this situation. */
+        /** @todo check this situation. */
 
         $parts = explode(':', $headerData, 2);
 
