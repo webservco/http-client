@@ -17,7 +17,6 @@ use WebServCo\Log\Contract\LoggerFactoryInterface;
 
 use function array_key_exists;
 use function curl_errno;
-use function curl_error;
 use function curl_getinfo;
 use function curl_setopt;
 use function curl_setopt_array;
@@ -43,7 +42,7 @@ use const CURLOPT_TIMEOUT;
 use const CURLOPT_URL;
 use const CURLOPT_VERBOSE;
 
-abstract class AbstractCurlService implements CurlServiceInterface
+abstract class AbstractCurlService extends AbstractCurlExceptionService implements CurlServiceInterface
 {
     /**
      * List of loggers, by cURL handle.
@@ -139,7 +138,7 @@ abstract class AbstractCurlService implements CurlServiceInterface
         // temporary file/memory wrapper; if bigger than 5MB will be written to temp file.
         $resource = fopen('php://temp/maxmemory:' . (5 * 1_024 * 1_024), 'w');
         if (!is_resource($resource)) {
-            throw new ClientException('Error creating debug outout location.');
+            throw new ClientException('Error creating debug output location.');
         }
         $this->debugStderr[$handleIdentifier] = $resource;
         // Set cURl debug options
@@ -171,10 +170,7 @@ abstract class AbstractCurlService implements CurlServiceInterface
             return null;
         }
 
-        throw new ClientException(
-            curl_error($curlHandle),
-            $errorNumber,
-        );
+        throw $this->createExceptionFromErrorCode($errorNumber);
     }
 
     protected function logThrowable(?CurlHandle $curlHandle, Throwable $throwable): bool
