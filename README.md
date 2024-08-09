@@ -2,6 +2,8 @@
 
 A minimalist PHP HTTP Client implementation using cURL.
 
+Test project: [webservco/http-client-test](https://github.com/webservco/http-client-test)
+
 ---
 
 ## Dependencies
@@ -9,7 +11,7 @@ A minimalist PHP HTTP Client implementation using cURL.
 - `ext-curl`
 - `psr/http-client`
 - `psr/http-factory`
-- `webservco/log`
+- `webservco/log` (needs PSR logger factory)
 
 ---
 
@@ -164,6 +166,8 @@ final class CurlServiceFactory
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+
+Please make sure to update tests as appropriate.
 
 ---
 
