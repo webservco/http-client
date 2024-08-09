@@ -215,19 +215,17 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function headerCallback(CurlHandle $curlHandle, string $headerData): int
     {
+        // Keep track of redirects and reset headers between each redirect
+        $this->handleRedirects($curlHandle);
+
         $headerDataLength = strlen($headerData);
 
-        /**
-         * "It is important to note that the callback is invoked
-         * for the headers of all responses received after initiating a request and not just the final response."
-         */
-        /** @todo check this situation. */
+        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
 
         $parts = explode(':', $headerData, 2);
 
         if (array_key_exists(1, $parts)) {
-            $this->responseHeaders[$this->getHandleIdentifier($curlHandle)][strtolower(trim($parts[0]))][] =
-                trim($parts[1]);
+            $this->responseHeaders[$handleIdentifier][strtolower(trim($parts[0]))][] = trim($parts[1]);
         }
 
         return $headerDataLength;

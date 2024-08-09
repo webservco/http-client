@@ -16,6 +16,7 @@ use WebServCo\Http\Client\Exception\ClientException;
 use WebServCo\Log\Contract\LoggerFactoryInterface;
 
 use function array_key_exists;
+use function array_key_last;
 use function curl_errno;
 use function curl_getinfo;
 use function curl_setopt;
@@ -29,6 +30,8 @@ use function rewind;
 use function sprintf;
 use function stream_get_contents;
 
+use const CURLINFO_EFFECTIVE_URL;
+use const CURLINFO_REDIRECT_COUNT;
 use const CURLINFO_RESPONSE_CODE;
 use const CURLOPT_ACCEPT_ENCODING;
 use const CURLOPT_CONNECTTIMEOUT;
@@ -66,6 +69,20 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
     protected array $responseHeaders = [];
 
     /**
+     * List of redirects, by cURL handle.
+     *
+     * Populated by the CURLOPT_HEADERFUNCTION callback.
+     * Format:
+     *  key: cURL handle identifier.
+     * value: array of redirects for that cURL handle:
+     * - key: CURLINFO_REDIRECT_COUNT
+     * - value: CURLINFO_EFFECTIVE_URL
+     *
+     * @var array<string,array<int,string>> $responseRedirects
+     */
+    protected array $responseRedirects = [];
+
+    /**
      * List of debug streams, by cURL handle.
      * Used with CURLOPT_STDERR.
      *
@@ -79,6 +96,15 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
         protected ResponseFactoryInterface $responseFactory,
         private StreamFactoryInterface $streamFactory,
     ) {
+    }
+
+    protected function getLastRedirectIndex(string $handleIdentifier): ?int
+    {
+        if (!array_key_exists($handleIdentifier, $this->responseRedirects)) {
+            return null;
+        }
+
+        return array_key_last($this->responseRedirects[$handleIdentifier]);
     }
 
     /**
@@ -155,6 +181,40 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
         $this->logRequest($curlHandle, $request);
 
         return $curlHandle;
+    }
+
+    /**
+     * Keep track of redirects and reset headers between each redirect
+     *
+     * "It is important to note that the callback is invoked
+     * for the headers of all responses received after initiating a request and not just the final response."
+     *
+     * Workaround: keep track of redirects and reset headers between each redirect.
+     *
+     * Note: this is not performant because it does the checks for each individual header.
+     * An alternative solution would be to follow redirects manually.
+     */
+    protected function handleRedirects(CurlHandle $curlHandle): bool
+    {
+        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
+
+        // Get current value
+        $currentRedirectIndex = (int) curl_getinfo($curlHandle, CURLINFO_REDIRECT_COUNT);
+        $currentUrl = (string) curl_getinfo($curlHandle, CURLINFO_EFFECTIVE_URL);
+
+        // Get last index
+        $lastRedirectIndex = $this->getLastRedirectIndex($handleIdentifier);
+
+        // Check
+        if ($currentRedirectIndex > $lastRedirectIndex) {
+            // A new redirect has started, reset headers.
+            $this->responseHeaders[$handleIdentifier] = [];
+        }
+
+        // Store current redirect info, after checking.
+        $this->responseRedirects[$handleIdentifier][$currentRedirectIndex] = $currentUrl;
+
+        return true;
     }
 
     /**
