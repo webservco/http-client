@@ -30,17 +30,25 @@ interface CurlMultiServiceInterface
 
     /**
      * 3) Execute all cURL sessions in parallel.
+     * This does not actually execute the requests.
      */
     public function executeSessions(): bool;
 
     /**
      * 4) Retrieve the response and close the handle (one).
+     *
+     * This is the part that actually executes the request.
+     *
      * Use case: consumer keeps track of requests added and needs to be able to identify corresponding responses.
+     * Eg. implement rate limiting.
      */
     public function getResponse(string $handleIdentifier): ResponseInterface;
 
     /**
      * 5) Retrieve the response and close the handle (all).
+     *
+     * This is the part that actually executes the request.
+     *
      * Use case: consumer just needs all responses, no need to link them to the requests.
      *
      * @return \Generator<\Psr\Http\Message\ResponseInterface>
