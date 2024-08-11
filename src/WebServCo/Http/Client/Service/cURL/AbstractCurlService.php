@@ -21,14 +21,11 @@ use function curl_errno;
 use function curl_getinfo;
 use function curl_setopt;
 use function curl_setopt_array;
-use function fclose;
 use function fopen;
 use function implode;
 use function is_resource;
 use function is_string;
-use function rewind;
 use function sprintf;
-use function stream_get_contents;
 
 use const CURLINFO_EFFECTIVE_URL;
 use const CURLINFO_REDIRECT_COUNT;
@@ -45,7 +42,7 @@ use const CURLOPT_TIMEOUT;
 use const CURLOPT_URL;
 use const CURLOPT_VERBOSE;
 
-abstract class AbstractCurlService extends AbstractCurlExceptionService implements CurlServiceInterface
+abstract class AbstractCurlService extends AbstractCurlLoggerService implements CurlServiceInterface
 {
     /**
      * List of loggers, by cURL handle.
@@ -67,28 +64,6 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
      * @var array<string,array<string,array<string>>> $responseHeaders
      */
     protected array $responseHeaders = [];
-
-    /**
-     * List of redirects, by cURL handle.
-     *
-     * Populated by the CURLOPT_HEADERFUNCTION callback.
-     * Format:
-     *  key: cURL handle identifier.
-     * value: array of redirects for that cURL handle:
-     * - key: CURLINFO_REDIRECT_COUNT
-     * - value: CURLINFO_EFFECTIVE_URL
-     *
-     * @var array<string,array<int,string>> $responseRedirects
-     */
-    protected array $responseRedirects = [];
-
-    /**
-     * List of debug streams, by cURL handle.
-     * Used with CURLOPT_STDERR.
-     *
-     * @var array<string,resource>
-     */
-    private array $debugStderr = [];
 
     public function __construct(
         protected CurlServiceConfiguration $configuration,
@@ -121,36 +96,25 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
         return $responseCode;
     }
 
-    protected function handleDebugAfterExecution(CurlHandle $curlHandle, ?ResponseInterface $response): CurlHandle
+    protected function handleDebugAfterExecution(CurlHandle $curlHandle, ?ResponseInterface $response): bool
     {
         if (!$this->configuration->enableDebugMode) {
-            return $curlHandle;
+            return false;
         }
 
-        /**
-         * Log cURL information.
-         * Note: this is the short version (no parameters).
-         * Seems more parameters are available, but would have to be called one by one:
-         * https://www.php.net/manual/en/function.curl-getinfo.php
-         */
-        $this->getLogger($curlHandle)->debug('curl_getinfo', ['curl_getinfo' => curl_getinfo($curlHandle)]);
+        // Log cURL information.
+        $this->logInfo($curlHandle);
 
         // Log stderr.
-        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
-        if (!array_key_exists($handleIdentifier, $this->debugStderr)) {
-            throw new ClientException('Error retrieving debug output location.');
-        }
-        rewind($this->debugStderr[$handleIdentifier]);
-        $stderr = stream_get_contents($this->debugStderr[$handleIdentifier]);
-        fclose($this->debugStderr[$handleIdentifier]);
-        if ($stderr === false) {
-            throw new ClientException('Error retrieving debug output data.');
-        }
-        $this->getLogger($curlHandle)->debug('stderr', ['stderr' => $stderr]);
+        $this->logStderr($curlHandle);
 
+        // Log redirects.
+        $this->logRedirects($curlHandle);
+
+        // Log response.
         $this->logResponse($curlHandle, $response);
 
-        return $curlHandle;
+        return true;
     }
 
     protected function handleDebugBeforeExecution(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
@@ -373,51 +337,5 @@ abstract class AbstractCurlService extends AbstractCurlExceptionService implemen
         }
 
         return $headers;
-    }
-
-    private function logRequest(CurlHandle $curlHandle, RequestInterface $request): bool
-    {
-        if (!$this->configuration->enableDebugMode) {
-            return false;
-        }
-
-        $this->getLogger($curlHandle)->debug(
-            'request',
-            [
-                'request' => [
-                    'body' => (string) $request->getBody(),
-                    'headers' => $request->getHeaders(),
-                    'method' => $request->getMethod(),
-                    'url' => $request->getUri()->__toString(),
-                ],
-            ],
-        );
-
-        return true;
-    }
-
-    private function logResponse(CurlHandle $curlHandle, ?ResponseInterface $response): bool
-    {
-        if (!$this->configuration->enableDebugMode) {
-            return false;
-        }
-
-        if ($response === null) {
-            return false;
-        }
-
-        $this->getLogger($curlHandle)->debug(
-            'response',
-            [
-                'response' => [
-                    'body' => (string) $response->getBody(),
-                    'headers' => $response->getHeaders(),
-                    'reasonPhrase' => $response->getReasonPhrase(),
-                    'statusCode' => $response->getStatusCode(),
-                ],
-            ],
-        );
-
-        return true;
     }
 }
