@@ -71,10 +71,6 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
 
     public function createHandle(RequestInterface $request): string
     {
-        if ($this->curlService->getConfiguration()->enableDebugMode) {
-            $this->curlService->getLogger(null)->debug(__FUNCTION__);
-        }
-
         if ($this->curlMultiHandle === null) {
             /**
              * Create the multiple cURL handle.

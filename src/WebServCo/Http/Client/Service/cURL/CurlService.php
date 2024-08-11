@@ -44,6 +44,9 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function createHandle(RequestInterface $request): CurlHandle
     {
+        if ($this->configuration->enableDebugMode) {
+            $this->getLogger(null)->debug(sprintf('%s: %s', __FUNCTION__, $request->getUri()));
+        }
         try {
             $curlHandle = curl_init();
             if (!$curlHandle instanceof CurlHandle) {
@@ -75,11 +78,11 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function executeCurlSession(CurlHandle $curlHandle): ?string
     {
-        try {
-            if ($this->configuration->enableDebugMode) {
-                $this->getLogger($curlHandle)->debug('Executing session.');
-            }
+        if ($this->configuration->enableDebugMode) {
+            $this->getLogger($curlHandle)->debug(__FUNCTION__);
+        }
 
+        try {
             /**
              * "Execute the given cURL session."
              * "This function should be called after initializing a cURL session
@@ -146,6 +149,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
             ? $this->getHandleIdentifier($curlHandle)
             : 'http-client';
         if (!array_key_exists($handleIdentifier, $this->loggers)) {
+            $dateTimeImmutable = new DateTimeImmutable();
             $this->loggers[$handleIdentifier] = $this->loggerFactory->createLogger(
                 /**
                  * Unorthodox: use a path (http-client/time/handleIdentifier) as channel.
@@ -155,9 +159,9 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
                     'http-client',
                     DIRECTORY_SEPARATOR,
                     // Use only up to minutes, as requests may spread across seconds
-                    (new DateTimeImmutable())->format('Ymd.Hi'),
+                    $dateTimeImmutable->format('Ymd.Hi'),
                     DIRECTORY_SEPARATOR,
-                    $handleIdentifier,
+                    sprintf('%s.%s', $dateTimeImmutable->format('Ymd.His.u'), $handleIdentifier),
                 ),
             );
         }
@@ -171,7 +175,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     public function getResponse(CurlHandle $curlHandle, ?string $responseContent): ResponseInterface
     {
         if ($this->configuration->enableDebugMode) {
-            $this->getLogger($curlHandle)->debug('Get response.');
+            $this->getLogger($curlHandle)->debug(__FUNCTION__);
         }
 
         $response = null;
