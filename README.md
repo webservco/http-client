@@ -6,15 +6,6 @@ Test project: [webservco/http-client-test](https://github.com/webservco/http-cli
 
 ---
 
-## Dependencies
-
-- `ext-curl`
-- `psr/http-client`
-- `psr/http-factory`
-- `webservco/log` (needs PSR logger factory)
-
----
-
 ## Installation
 
 `composer.json`:
