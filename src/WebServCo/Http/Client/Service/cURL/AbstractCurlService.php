@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WebServCo\Http\Client\Service\cURL;
 
 use CurlHandle;
+use Fig\Http\Message\RequestMethodInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -26,16 +27,20 @@ use function implode;
 use function is_resource;
 use function is_string;
 use function sprintf;
+use function strlen;
 
 use const CURLINFO_EFFECTIVE_URL;
 use const CURLINFO_REDIRECT_COUNT;
 use const CURLINFO_RESPONSE_CODE;
 use const CURLOPT_ACCEPT_ENCODING;
 use const CURLOPT_CONNECTTIMEOUT;
+use const CURLOPT_CUSTOMREQUEST;
 use const CURLOPT_FOLLOWLOCATION;
 use const CURLOPT_HEADER;
 use const CURLOPT_HEADERFUNCTION;
 use const CURLOPT_HTTPHEADER;
+use const CURLOPT_NOBODY;
+use const CURLOPT_POSTFIELDS;
 use const CURLOPT_RETURNTRANSFER;
 use const CURLOPT_STDERR;
 use const CURLOPT_TIMEOUT;
@@ -148,6 +153,26 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     }
 
     /**
+     * Used in `createHandle` to have less liens of code.
+     */
+    protected function handleHandle(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        $curlHandle = $this->setRequestOptions($curlHandle, $request);
+
+        $curlHandle = $this->handleDebugBeforeExecution($curlHandle, $request);
+
+        /**
+         * Handle request method.
+         * Important to be before `setRequestHeaders`, because it can set headers to be added.
+         */
+        $this->handleRequestMethod($curlHandle, $request);
+
+        $curlHandle = $this->setRequestHeaders($curlHandle, $request);
+
+        return $curlHandle;
+    }
+
+    /**
      * Keep track of redirects and reset headers between each redirect
      *
      * "It is important to note that the callback is invoked
@@ -182,10 +207,73 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     }
 
     /**
+     * Make sure request contains all the required data.
+     */
+    protected function handleRequestBody(RequestInterface $request): RequestInterface
+    {
+        $body = (string) $request->getBody();
+        // Handle "Content-Length" header
+        if (!$request->hasHeader('Content-Length')) {
+            // Add missing header.
+            // Use strlen and not mb_strlen: "The length of the request body in octets (8-bit bytes)."
+            $request = $request->withHeader('Content-Length', (string) strlen($body));
+        }
+
+        return $request;
+    }
+
+    /**
+     * Handle request method.
+     *
+     * Set cURL options relevant to the request metod.
+     * This also adds the request body data.
+     */
+    protected function handleRequestMethod(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        $method = $request->getMethod();
+        // ""A custom request method to use instead of "GET" or "HEAD" when doing a HTTP request."
+        curl_setopt($curlHandle, CURLOPT_CUSTOMREQUEST, $method);
+
+        switch ($method) {
+            case RequestMethodInterface::METHOD_PATCH:
+            case RequestMethodInterface::METHOD_POST:
+            case RequestMethodInterface::METHOD_PUT:
+                // Request can have a body.
+                $body = (string) $request->getBody();
+                if ($body !== '') {
+                    // "The full data to post in a HTTP "POST" operation.
+                    // This parameter can either be passed as a urlencoded string like 'para1=val1&para2=val2&...'
+                    // or as an array with the field name as key and field data as value.
+                    // If value is an array, the Content-Type header will be set to multipart/form-data"
+                    curl_setopt($curlHandle, CURLOPT_POSTFIELDS, $body);
+                }
+
+                break;
+            case RequestMethodInterface::METHOD_HEAD:
+                // Request must not have a body.
+                curl_setopt($curlHandle, CURLOPT_NOBODY, true);
+
+                break;
+            default:
+                break;
+        }
+
+        return $curlHandle;
+    }
+
+    /**
      * Process response error.
      *
      * If session is executed and contains errors,
      * this creates an Exception object that can be thrown when response is accessed.
+     *
+     * Phan:
+     * "PhanCompatibleStandaloneType Cannot use null as a standalone type before php 8.2."
+     * However:
+     * - composer: 8.3
+     * - env where run: 8.3
+     *
+     * @suppress PhanCompatibleStandaloneType
      */
     protected function handleResponseError(CurlHandle $curlHandle): null
     {
@@ -305,10 +393,19 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         return $response;
     }
 
+    /**
+     *  Phan:
+     *  "PhanPartialTypeMismatchArgument Argument 1 ($name) is $name of type int|string
+     *  but \Psr\Http\Message\ResponseInterface::withHeader() takes string (int is incompatible)"
+     *  This is false, $name is string.
+     *
+     * @suppress PhanPartialTypeMismatchArgument
+     */
     protected function setResponseHeaders(CurlHandle $curlHandle, ResponseInterface $response): ResponseInterface
     {
         $handleIdentifier = $this->getHandleIdentifier($curlHandle);
         foreach ($this->responseHeaders[$handleIdentifier] as $name => $values) {
+            // Phan error on next line, see method docblock.
             $response = $response->withHeader($name, implode(', ', $values));
         }
 

@@ -27,6 +27,7 @@
     "require": {
         "php" : "^8.3",
         "ext-curl": "*",
+        "fig/http-message-util": "^1",
         "psr/http-client": "^1",
         "psr/http-factory": "^1",
         "webservco/log": "^0"
