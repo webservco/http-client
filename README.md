@@ -42,7 +42,7 @@ $response = $httpClient->sendRequest(
 ### Custom multi processing HTTP client implementation
 
 - Use to send multiple requests in parallel via cURL multi handle;
-- Custom implementation, thought input and output are PSR compliant;
+- Custom implementation, though input and output are PSR compliant;
 
 ```php
 // \WebServCo\Http\Client\Contract\Service\cURL\CurlMultiServiceInterface
