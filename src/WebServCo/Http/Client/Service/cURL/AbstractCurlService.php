@@ -80,11 +80,11 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
 
     protected function getLastRedirectIndex(string $handleIdentifier): ?int
     {
-        if (!array_key_exists($handleIdentifier, $this->responseRedirects)) {
+        if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
             return null;
         }
 
-        return array_key_last($this->responseRedirects[$handleIdentifier]);
+        return array_key_last($this->responseLocations[$handleIdentifier]);
     }
 
     /**
@@ -114,7 +114,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         $this->logStderr($curlHandle);
 
         // Log redirects.
-        $this->logRedirects($curlHandle);
+        $this->logLocations($curlHandle);
 
         // Log response.
         $this->logResponse($curlHandle, $response);
@@ -181,7 +181,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      * Workaround: keep track of redirects and reset headers between each redirect.
      *
      * Note: this is not performant because it does the checks for each individual header.
-     * An alternative solution would be to follow redirects manually.
+     * An alternative solution would be to follow redirects manually (more performant, but more difficult to implement).
      */
     protected function handleRedirects(CurlHandle $curlHandle): bool
     {
@@ -201,7 +201,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         }
 
         // Store current redirect info, after checking.
-        $this->responseRedirects[$handleIdentifier][$currentRedirectIndex] = $currentUrl;
+        $this->responseLocations[$handleIdentifier][$currentRedirectIndex] = $currentUrl;
 
         return true;
     }

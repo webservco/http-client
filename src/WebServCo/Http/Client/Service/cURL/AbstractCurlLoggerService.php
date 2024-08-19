@@ -27,18 +27,21 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
     protected array $debugStderr = [];
 
     /**
-     * List of redirects, by cURL handle.
+     * List of all locations visited by each cURL handle.
+     *
+     * At the very least contains only one item: the original URL.
+     * If there are any redirects during execution, more items will be added.
      *
      * Populated by the CURLOPT_HEADERFUNCTION callback.
      * Format:
      *  key: cURL handle identifier.
-     * value: array of redirects for that cURL handle:
+     * value: array of locations for that cURL handle:
      * - key: CURLINFO_REDIRECT_COUNT
      * - value: CURLINFO_EFFECTIVE_URL
      *
-     * @var array<string,array<int,string>> $responseRedirects
+     * @var array<string,array<int,string>> $responseLocations
      */
-    protected array $responseRedirects = [];
+    protected array $responseLocations = [];
 
     protected function logInfo(CurlHandle $curlHandle): bool
     {
@@ -52,16 +55,16 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
         return true;
     }
 
-    protected function logRedirects(CurlHandle $curlHandle): bool
+    protected function logLocations(CurlHandle $curlHandle): bool
     {
         $handleIdentifier = $this->getHandleIdentifier($curlHandle);
 
-        if (!array_key_exists($handleIdentifier, $this->responseRedirects)) {
-            throw new ClientException('Error retrieving redirect data.');
+        if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
+            throw new ClientException('Error retrieving locations data.');
         }
         $this->getLogger($curlHandle)->debug(
-            'redirects',
-            ['redirects' => $this->responseRedirects[$handleIdentifier]],
+            'locations',
+            ['locations' => $this->responseLocations[$handleIdentifier]],
         );
 
         return true;
