@@ -151,9 +151,9 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
         if (!array_key_exists($handleIdentifier, $this->loggers)) {
             $dateTimeImmutable = new DateTimeImmutable();
             $this->loggers[$handleIdentifier] = $this->loggerFactory->createLogger(
-                /**
-                 * Unorthodox: use a path (http-client/time/handleIdentifier) as channel.
-                 */
+            /**
+             * Unorthodox: use a path (http-client/time/handleIdentifier) as channel.
+             */
                 sprintf(
                     '%s%s%s%s%s',
                     'http-client',
@@ -233,5 +233,14 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
         }
 
         return $headerDataLength;
+    }
+
+    public function reset(): bool
+    {
+        $this->loggers = [];
+
+        $this->responseHeaders = [];
+
+        return true;
     }
 }

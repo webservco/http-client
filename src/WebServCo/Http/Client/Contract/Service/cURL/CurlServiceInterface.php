@@ -55,4 +55,9 @@ interface CurlServiceInterface
      * Method must be public because it can be accessed also from outside of the service (curl multi session).
      */
     public function headerCallback(CurlHandle $curlHandle, string $headerData): int;
+
+    /**
+     * Clear any stored data to free resources.
+     */
+    public function reset(): bool;
 }

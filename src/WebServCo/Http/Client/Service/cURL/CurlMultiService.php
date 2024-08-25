@@ -54,21 +54,6 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
     {
     }
 
-    public function cleanup(): bool
-    {
-        if ($this->curlService->getConfiguration()->enableDebugMode) {
-            $this->curlService->getLogger(null)->debug(__FUNCTION__);
-        }
-
-        // Reset.
-        $this->curlHandleExceptions = [];
-        $this->curlHandles = [];
-
-        $this->curlMultiHandle = null;
-
-        return true;
-    }
-
     public function createHandle(RequestInterface $request): string
     {
         if ($this->curlMultiHandle === null) {
@@ -196,6 +181,27 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
         foreach (array_keys($this->curlHandles) as $handleIdentifier) {
             yield $this->getResponse($handleIdentifier);
         }
+    }
+
+    public function reset(): bool
+    {
+        if ($this->curlService->getConfiguration()->enableDebugMode) {
+            $this->curlService->getLogger(null)->debug(__FUNCTION__);
+        }
+
+        // Reset (local).
+
+        $this->curlHandleExceptions = [];
+
+        $this->curlHandles = [];
+
+        $this->curlMultiHandle = null;
+
+        // Reset (service)
+
+        $this->curlService->reset();
+
+        return true;
     }
 
     /**

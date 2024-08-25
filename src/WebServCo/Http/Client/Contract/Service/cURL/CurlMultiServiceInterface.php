@@ -11,14 +11,7 @@ use Psr\Http\Message\ResponseInterface;
 interface CurlMultiServiceInterface
 {
     /**
-     * 1) Cleanup.
-     *
-     * Use to clean up afterward, or reset between multiple runs.
-     */
-    public function cleanup(): bool;
-
-    /**
-     * 2) Setup a cURL handle.
+     * 1) Setup a cURL handle.
      *
      * Create normal handle and add it to multi handle.
      *
@@ -29,13 +22,13 @@ interface CurlMultiServiceInterface
     public function createHandle(RequestInterface $request): string;
 
     /**
-     * 3) Execute all cURL sessions in parallel.
+     * 2) Execute all cURL sessions in parallel.
      * This does not actually execute the requests.
      */
     public function executeSessions(): bool;
 
     /**
-     * 4) Retrieve the response and close the handle (one).
+     * 3) Retrieve the response and close the handle (one).
      *
      * This is the part that actually executes the request.
      *
@@ -45,7 +38,7 @@ interface CurlMultiServiceInterface
     public function getResponse(string $handleIdentifier): ResponseInterface;
 
     /**
-     * 5) Retrieve the response and close the handle (all).
+     * 4) Retrieve the response and close the handle (all).
      *
      * This is the part that actually executes the request.
      *
@@ -54,4 +47,11 @@ interface CurlMultiServiceInterface
      * @return \Generator<\Psr\Http\Message\ResponseInterface>
      */
     public function iterateResponse(): Generator;
+
+    /**
+     * 5) Reset.
+     *
+     * Clear any stored data to free resources.
+     */
+    public function reset(): bool;
 }
