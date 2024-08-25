@@ -45,6 +45,7 @@ use const CURLOPT_HEADERFUNCTION;
 use const CURLOPT_HTTPHEADER;
 use const CURLOPT_NOBODY;
 use const CURLOPT_POSTFIELDS;
+use const CURLOPT_PRIVATE;
 use const CURLOPT_RETURNTRANSFER;
 use const CURLOPT_STDERR;
 use const CURLOPT_TIMEOUT;
@@ -257,7 +258,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function addHandleIdentifier(CurlHandle $curlHandle): CurlHandle
     {
-        curl_setopt($curlHandle, CURLINFO_PRIVATE, str_shuffle(md5(microtime())));
+        curl_setopt($curlHandle, CURLOPT_PRIVATE, str_shuffle(md5(microtime())));
 
         return $curlHandle;
     }
