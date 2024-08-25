@@ -28,6 +28,8 @@ final class HttpClient implements ClientInterface
 
         unset($curlHandle);
 
+        $this->curlService->reset();
+
         return $response;
     }
 }
