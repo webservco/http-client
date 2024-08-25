@@ -16,16 +16,16 @@ use WebServCo\Http\Client\Exception\ClientException;
 
 use function array_key_exists;
 use function curl_exec;
+use function curl_getinfo;
 use function curl_init;
 use function explode;
 use function is_string;
-use function md5;
-use function spl_object_hash;
 use function sprintf;
 use function strlen;
 use function strtolower;
 use function trim;
 
+use const CURLINFO_PRIVATE;
 use const DIRECTORY_SEPARATOR;
 
 /**
@@ -125,17 +125,17 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function getHandleIdentifier(CurlHandle $curlHandle): string
     {
-        /**
-         * md5 also used based on comments in the manual:
-         *
-         * "New hashes are much more simple and can be something like
-         * "0000000000000e600000000000000000" or "0000000000000e490000000000000000",
-         * which PHP will interpret as numeric (exponent).
-         * in_array() will compare non type-safe by default and will interpret named hashes as "0"."
-         *
-         * "to facilitate visual comparisons, and make it more likely that the first few or last few digits are unique"
-         */
-        return md5(spl_object_hash($curlHandle));
+        $handleIdentifier = curl_getinfo($curlHandle, CURLINFO_PRIVATE);
+
+        if (!is_string($handleIdentifier)) {
+            throw new ClientException('Error getting handle identifier.');
+        }
+
+        if ($handleIdentifier === '') {
+            throw new ClientException('Invalid handle identifier.');
+        }
+
+        return $handleIdentifier;
     }
 
     /**

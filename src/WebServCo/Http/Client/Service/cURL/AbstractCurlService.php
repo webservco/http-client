@@ -26,10 +26,14 @@ use function fopen;
 use function implode;
 use function is_resource;
 use function is_string;
+use function md5;
+use function microtime;
 use function sprintf;
+use function str_shuffle;
 use function strlen;
 
 use const CURLINFO_EFFECTIVE_URL;
+use const CURLINFO_PRIVATE;
 use const CURLINFO_REDIRECT_COUNT;
 use const CURLINFO_RESPONSE_CODE;
 use const CURLOPT_ACCEPT_ENCODING;
@@ -118,6 +122,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     protected function handleHandle(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
+        $curlHandle = $this->addHandleIdentifier($curlHandle);
+
         $request = $this->handleRequestBody($request);
 
         $curlHandle = $this->setRequestOptions($curlHandle, $request);
@@ -241,6 +247,19 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         }
 
         return $response;
+    }
+
+    /**
+     * Generate unique handle identifier and add it to handle.
+     *
+     * Initial functionality: `spl_object_hash`.
+     * Removed because hashes are reused by PHP and there can be collisions if service is not reset.
+     */
+    private function addHandleIdentifier(CurlHandle $curlHandle): CurlHandle
+    {
+        curl_setopt($curlHandle, CURLINFO_PRIVATE, str_shuffle(md5(microtime())));
+
+        return $curlHandle;
     }
 
     /**
