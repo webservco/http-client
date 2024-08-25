@@ -153,7 +153,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     }
 
     /**
-     * Used in `createHandle` to have less liens of code.
+     * Used in `createHandle` to have fewer lines of code.
      */
     protected function handleHandle(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
