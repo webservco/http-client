@@ -53,8 +53,6 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
                 throw new ClientException('Error initializing cURL session.');
             }
 
-            $request = $this->handleRequestBody($request);
-
             $curlHandle = $this->handleHandle($curlHandle, $request);
 
             if ($this->configuration->enableDebugMode) {

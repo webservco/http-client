@@ -78,15 +78,6 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     ) {
     }
 
-    protected function getLastRedirectIndex(string $handleIdentifier): ?int
-    {
-        if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
-            return null;
-        }
-
-        return array_key_last($this->responseLocations[$handleIdentifier]);
-    }
-
     /**
      * Get response code.
      * If session is not executed, returns 0 (should be handled by consumer).
@@ -122,41 +113,13 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         return true;
     }
 
-    protected function handleDebugBeforeExecution(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
-    {
-        if (!$this->configuration->enableDebugMode) {
-            return $curlHandle;
-        }
-
-        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
-        // Create a stream where cURL should write errors
-        // temporary file/memory wrapper; if bigger than 5MB will be written to temp file.
-        $resource = fopen('php://temp/maxmemory:' . (5 * 1_024 * 1_024), 'w');
-        if (!is_resource($resource)) {
-            throw new ClientException('Error creating debug output location.');
-        }
-        $this->debugStderr[$handleIdentifier] = $resource;
-        // Set cURl debug options
-        // "An alternative location to output errors to instead of STDERR."
-        curl_setopt($curlHandle, CURLOPT_STDERR, $this->debugStderr[$handleIdentifier]);
-        /**
-         * "true to output verbose information.
-         * Writes output to STDERR, or the file specified using CURLOPT_STDERR."
-         * Note: this does not work when CURLINFO_HEADER_OUT is set: https://bugs.php.net/bug.php?id=65348
-         */
-        curl_setopt($curlHandle, CURLOPT_VERBOSE, true);
-
-        // Log request.
-        $this->logRequest($curlHandle, $request);
-
-        return $curlHandle;
-    }
-
     /**
      * Used in `createHandle` to have fewer lines of code.
      */
     protected function handleHandle(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
+        $request = $this->handleRequestBody($request);
+
         $curlHandle = $this->setRequestOptions($curlHandle, $request);
 
         $curlHandle = $this->handleDebugBeforeExecution($curlHandle, $request);
@@ -207,61 +170,6 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     }
 
     /**
-     * Make sure request contains all the required data.
-     */
-    protected function handleRequestBody(RequestInterface $request): RequestInterface
-    {
-        $body = (string) $request->getBody();
-        // Handle "Content-Length" header
-        if (!$request->hasHeader('Content-Length')) {
-            // Add missing header.
-            // Use strlen and not mb_strlen: "The length of the request body in octets (8-bit bytes)."
-            $request = $request->withHeader('Content-Length', (string) strlen($body));
-        }
-
-        return $request;
-    }
-
-    /**
-     * Handle request method.
-     *
-     * Set cURL options relevant to the request metod.
-     * This also adds the request body data.
-     */
-    protected function handleRequestMethod(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
-    {
-        $method = $request->getMethod();
-        // ""A custom request method to use instead of "GET" or "HEAD" when doing a HTTP request."
-        curl_setopt($curlHandle, CURLOPT_CUSTOMREQUEST, $method);
-
-        switch ($method) {
-            case RequestMethodInterface::METHOD_PATCH:
-            case RequestMethodInterface::METHOD_POST:
-            case RequestMethodInterface::METHOD_PUT:
-                // Request can have a body.
-                $body = (string) $request->getBody();
-                if ($body !== '') {
-                    // "The full data to post in a HTTP "POST" operation.
-                    // This parameter can either be passed as a urlencoded string like 'para1=val1&para2=val2&...'
-                    // or as an array with the field name as key and field data as value.
-                    // If value is an array, the Content-Type header will be set to multipart/form-data"
-                    curl_setopt($curlHandle, CURLOPT_POSTFIELDS, $body);
-                }
-
-                break;
-            case RequestMethodInterface::METHOD_HEAD:
-                // Request must not have a body.
-                curl_setopt($curlHandle, CURLOPT_NOBODY, true);
-
-                break;
-            default:
-                break;
-        }
-
-        return $curlHandle;
-    }
-
-    /**
      * Process response error.
      *
      * If session is executed and contains errors,
@@ -293,83 +201,6 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         );
 
         return true;
-    }
-
-    /**
-     * Set the request headers to the cURL handle.
-     */
-    protected function setRequestHeaders(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
-    {
-        if ($request->hasHeader('Accept-Encoding')) {
-            /**
-             * Set "Accept-Encoding" header.
-             * Do in this way instead of manual header, so that the response is automatically decoded.
-             * Leave empty string, cURL will list all supported.
-             * "https://php.watch/articles/curl-php-accept-encoding-compression"
-             */
-            curl_setopt($curlHandle, CURLOPT_ACCEPT_ENCODING, $request->getHeaderLine('Accept-Encoding'));
-        }
-
-        /**
-         * Set headers.
-         * Consider:
-         * - it is not possible to add headers individually;
-         * - does not work to call this multiple times (overwrite);
-         * - all headers must be collected and then added all at once;
-         * - despite the name `CURLOPT_HTTPHEADER`, it needs and array of all headers;
-         */
-        curl_setopt(
-            $curlHandle,
-            /**
-             * "An array of HTTP header fields to set, in the format
-             * array('Content-type: text/plain', 'Content-length: 100')"
-             */
-            CURLOPT_HTTPHEADER,
-            $this->createRequestHeadersArray($request),
-        );
-
-        return $curlHandle;
-    }
-
-    /**
-     * Set the request options to the cURL handle.
-     */
-    protected function setRequestOptions(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
-    {
-        curl_setopt_array(
-            $curlHandle,
-            [
-                /**
-                 * "true to return the transfer as a string of the return value of curl_exec()
-                 * instead of outputting it directly."
-                 */
-                CURLOPT_RETURNTRANSFER => true,
-                /**
-                 * Callback for processing the response headers.
-                 *
-                 * https://curl.se/libcurl/c/CURLOPT_HEADERFUNCTION.html
-                 * https://www.php.net/manual/en/curl.constants.php#constant.curlopt-headerfunction
-                 * "A callback accepting two parameters.
-                 * The first is the cURL resource, the second is a string with the header data to be written.
-                 * The header data must be written by this callback. Return the number of bytes written."
-                 */
-                CURLOPT_HEADERFUNCTION => [$this, 'headerCallback'],
-                // "The number of seconds to wait while trying to connect. Use 0 to wait indefinitely."
-                CURLOPT_CONNECTTIMEOUT => $this->configuration->timeout,
-                // "true to follow any "Location: " header that the server sends as part of the HTTP header."
-                CURLOPT_FOLLOWLOCATION => true,
-                // "true to include the header in the output."
-                CURLOPT_HEADER => false,
-                // "The maximum number of seconds to allow cURL functions to execute."
-                CURLOPT_TIMEOUT => $this->configuration->timeout,
-                // "The URL to fetch. This can also be set when initializing a session with curl_init()."
-                CURLOPT_URL => $request->getUri()->__toString(),
-            ],
-        );
-
-        // ? consider: v13 "skipSslVerification"
-
-        return $curlHandle;
     }
 
     protected function setResponseBody(ResponseInterface $response, ?string $responseContent): ResponseInterface
@@ -434,5 +265,176 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         }
 
         return $headers;
+    }
+
+    private function getLastRedirectIndex(string $handleIdentifier): ?int
+    {
+        if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
+            return null;
+        }
+
+        return array_key_last($this->responseLocations[$handleIdentifier]);
+    }
+
+    private function handleDebugBeforeExecution(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        if (!$this->configuration->enableDebugMode) {
+            return $curlHandle;
+        }
+
+        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
+        // Create a stream where cURL should write errors
+        // temporary file/memory wrapper; if bigger than 5MB will be written to temp file.
+        $resource = fopen('php://temp/maxmemory:' . (5 * 1_024 * 1_024), 'w');
+        if (!is_resource($resource)) {
+            throw new ClientException('Error creating debug output location.');
+        }
+        $this->debugStderr[$handleIdentifier] = $resource;
+        // Set cURl debug options
+        // "An alternative location to output errors to instead of STDERR."
+        curl_setopt($curlHandle, CURLOPT_STDERR, $this->debugStderr[$handleIdentifier]);
+        /**
+         * "true to output verbose information.
+         * Writes output to STDERR, or the file specified using CURLOPT_STDERR."
+         * Note: this does not work when CURLINFO_HEADER_OUT is set: https://bugs.php.net/bug.php?id=65348
+         */
+        curl_setopt($curlHandle, CURLOPT_VERBOSE, true);
+
+        // Log request.
+        $this->logRequest($curlHandle, $request);
+
+        return $curlHandle;
+    }
+
+    /**
+     * Make sure request contains all the required data.
+     */
+    private function handleRequestBody(RequestInterface $request): RequestInterface
+    {
+        $body = (string) $request->getBody();
+        // Handle "Content-Length" header
+        if (!$request->hasHeader('Content-Length')) {
+            // Add missing header.
+            // Use strlen and not mb_strlen: "The length of the request body in octets (8-bit bytes)."
+            $request = $request->withHeader('Content-Length', (string) strlen($body));
+        }
+
+        return $request;
+    }
+
+    /**
+     * Handle request method.
+     *
+     * Set cURL options relevant to the request metod.
+     * This also adds the request body data.
+     */
+    private function handleRequestMethod(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        $method = $request->getMethod();
+        // ""A custom request method to use instead of "GET" or "HEAD" when doing a HTTP request."
+        curl_setopt($curlHandle, CURLOPT_CUSTOMREQUEST, $method);
+
+        switch ($method) {
+            case RequestMethodInterface::METHOD_PATCH:
+            case RequestMethodInterface::METHOD_POST:
+            case RequestMethodInterface::METHOD_PUT:
+                // Request can have a body.
+                $body = (string) $request->getBody();
+                if ($body !== '') {
+                    // "The full data to post in a HTTP "POST" operation.
+                    // This parameter can either be passed as a urlencoded string like 'para1=val1&para2=val2&...'
+                    // or as an array with the field name as key and field data as value.
+                    // If value is an array, the Content-Type header will be set to multipart/form-data"
+                    curl_setopt($curlHandle, CURLOPT_POSTFIELDS, $body);
+                }
+
+                break;
+            case RequestMethodInterface::METHOD_HEAD:
+                // Request must not have a body.
+                curl_setopt($curlHandle, CURLOPT_NOBODY, true);
+
+                break;
+            default:
+                break;
+        }
+
+        return $curlHandle;
+    }
+
+    /**
+     * Set the request headers to the cURL handle.
+     */
+    private function setRequestHeaders(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        if ($request->hasHeader('Accept-Encoding')) {
+            /**
+             * Set "Accept-Encoding" header.
+             * Do in this way instead of manual header, so that the response is automatically decoded.
+             * Leave empty string, cURL will list all supported.
+             * "https://php.watch/articles/curl-php-accept-encoding-compression"
+             */
+            curl_setopt($curlHandle, CURLOPT_ACCEPT_ENCODING, $request->getHeaderLine('Accept-Encoding'));
+        }
+
+        /**
+         * Set headers.
+         * Consider:
+         * - it is not possible to add headers individually;
+         * - does not work to call this multiple times (overwrite);
+         * - all headers must be collected and then added all at once;
+         * - despite the name `CURLOPT_HTTPHEADER`, it needs and array of all headers;
+         */
+        curl_setopt(
+            $curlHandle,
+            /**
+             * "An array of HTTP header fields to set, in the format
+             * array('Content-type: text/plain', 'Content-length: 100')"
+             */
+            CURLOPT_HTTPHEADER,
+            $this->createRequestHeadersArray($request),
+        );
+
+        return $curlHandle;
+    }
+
+    /**
+     * Set the request options to the cURL handle.
+     */
+    private function setRequestOptions(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        curl_setopt_array(
+            $curlHandle,
+            [
+                /**
+                 * "true to return the transfer as a string of the return value of curl_exec()
+                 * instead of outputting it directly."
+                 */
+                CURLOPT_RETURNTRANSFER => true,
+                /**
+                 * Callback for processing the response headers.
+                 *
+                 * https://curl.se/libcurl/c/CURLOPT_HEADERFUNCTION.html
+                 * https://www.php.net/manual/en/curl.constants.php#constant.curlopt-headerfunction
+                 * "A callback accepting two parameters.
+                 * The first is the cURL resource, the second is a string with the header data to be written.
+                 * The header data must be written by this callback. Return the number of bytes written."
+                 */
+                CURLOPT_HEADERFUNCTION => [$this, 'headerCallback'],
+                // "The number of seconds to wait while trying to connect. Use 0 to wait indefinitely."
+                CURLOPT_CONNECTTIMEOUT => $this->configuration->timeout,
+                // "true to follow any "Location: " header that the server sends as part of the HTTP header."
+                CURLOPT_FOLLOWLOCATION => true,
+                // "true to include the header in the output."
+                CURLOPT_HEADER => false,
+                // "The maximum number of seconds to allow cURL functions to execute."
+                CURLOPT_TIMEOUT => $this->configuration->timeout,
+                // "The URL to fetch. This can also be set when initializing a session with curl_init()."
+                CURLOPT_URL => $request->getUri()->__toString(),
+            ],
+        );
+
+        // ? consider: v13 "skipSslVerification"
+
+        return $curlHandle;
     }
 }
