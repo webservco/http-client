@@ -33,7 +33,6 @@ use function str_shuffle;
 use function strlen;
 
 use const CURLINFO_EFFECTIVE_URL;
-use const CURLINFO_PRIVATE;
 use const CURLINFO_REDIRECT_COUNT;
 use const CURLINFO_RESPONSE_CODE;
 use const CURLOPT_ACCEPT_ENCODING;
