@@ -14,7 +14,7 @@ abstract class AbstractCurlExceptionService
     /**
      * Create exception object based on status code.
      *
-     * Empty value (0, no errro) should be handled by consumer.
+     * Empty value (0, no error) should be handled by consumer.
      */
     protected function createExceptionFromErrorCode(int $code): Throwable
     {
