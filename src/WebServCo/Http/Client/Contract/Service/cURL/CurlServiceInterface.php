@@ -12,6 +12,8 @@ use WebServCo\Http\Client\DataTransfer\CurlServiceConfiguration;
 
 interface CurlServiceInterface
 {
+    public const string LOG_CHANNEL = 'http-client';
+
     /**
      * Create a cURL handle, ready to be executed (options and headers already set).
      */
@@ -34,9 +36,9 @@ interface CurlServiceInterface
     public function getHandleIdentifier(CurlHandle $curlHandle): string;
 
     /**
-     * Get logger for specific cURL handle.
+     * Get logger for specific channel.
      */
-    public function getLogger(?CurlHandle $curlHandle): LoggerInterface;
+    public function getLogger(string $channel): LoggerInterface;
 
     /**
      * Get response object.
@@ -55,6 +57,8 @@ interface CurlServiceInterface
      * Method must be public because it can be accessed also from outside of the service (curl multi session).
      */
     public function headerCallback(CurlHandle $curlHandle, string $headerData): int;
+
+    public function logIfDebug(string $channel, string $message): bool;
 
     /**
      * Clear any stored data to free resources.

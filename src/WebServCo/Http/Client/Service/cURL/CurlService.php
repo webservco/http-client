@@ -44,22 +44,14 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function createHandle(RequestInterface $request): CurlHandle
     {
-        if ($this->configuration->enableDebugMode) {
-            $this->getLogger(null)->debug(sprintf('%s: %s', __FUNCTION__, $request->getUri()));
-        }
+        $this->logIfDebug(self::LOG_CHANNEL, sprintf('%s: %s', __FUNCTION__, $request->getUri()));
         try {
             $curlHandle = curl_init();
             if (!$curlHandle instanceof CurlHandle) {
                 throw new ClientException('Error initializing cURL session.');
             }
 
-            $curlHandle = $this->handleHandle($curlHandle, $request);
-
-            if ($this->configuration->enableDebugMode) {
-                $this->getLogger($curlHandle)->debug('Handle created.');
-            }
-
-            return $curlHandle;
+            return $this->handleHandle($curlHandle, $request);
         } catch (Throwable $throwable) {
             /**
              * Log error.
@@ -76,9 +68,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function executeCurlSession(CurlHandle $curlHandle): ?string
     {
-        if ($this->configuration->enableDebugMode) {
-            $this->getLogger($curlHandle)->debug(__FUNCTION__);
-        }
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
         try {
             /**
@@ -91,11 +81,11 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
              */
             $responseContent = curl_exec($curlHandle);
 
-            if ($this->configuration->enableDebugMode) {
-                $this->getLogger($curlHandle)->debug('Session executed.');
-            }
+            $this->logIfDebug($this->getHandleIdentifier($curlHandle), 'Session executed.');
 
             if (!is_string($responseContent)) {
+                $this->logIfDebug($this->getHandleIdentifier($curlHandle), 'Response content is not a string.');
+
                 /**
                  * We only work with CURLOPT_RETURNTRANSFER, so string or error.
                  *
@@ -141,17 +131,14 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * Get logger for specific cURL handle.
      */
-    public function getLogger(?CurlHandle $curlHandle): LoggerInterface
+    public function getLogger(string $channel): LoggerInterface
     {
-        $handleIdentifier = $curlHandle !== null
-            ? $this->getHandleIdentifier($curlHandle)
-            : 'http-client';
-        if (!array_key_exists($handleIdentifier, $this->loggers)) {
+        if (!array_key_exists($channel, $this->loggers)) {
             $dateTimeImmutable = new DateTimeImmutable();
-            $this->loggers[$handleIdentifier] = $this->loggerFactory->createLogger(
-            /**
-             * Unorthodox: use a path (http-client/time/handleIdentifier) as channel.
-             */
+            $this->loggers[$channel] = $this->loggerFactory->createLogger(
+                /**
+                 * Unorthodox: use a path (http-client/time/handleIdentifier) as channel (if not default channel).
+                 */
                 sprintf(
                     '%s%s%s%s%s',
                     'http-client',
@@ -159,12 +146,14 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
                     // Use only up to minutes, as requests may spread across seconds
                     $dateTimeImmutable->format('Ymd.Hi'),
                     DIRECTORY_SEPARATOR,
-                    sprintf('%s.%s', $dateTimeImmutable->format('Ymd.His.u'), $handleIdentifier),
+                    $channel === self::LOG_CHANNEL
+                        ? $channel
+                        : sprintf('%s.%s', $dateTimeImmutable->format('Ymd.His.u'), $channel),
                 ),
             );
         }
 
-        return $this->loggers[$handleIdentifier];
+        return $this->loggers[$channel];
     }
 
     /**
@@ -172,9 +161,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function getResponse(CurlHandle $curlHandle, ?string $responseContent): ResponseInterface
     {
-        if ($this->configuration->enableDebugMode) {
-            $this->getLogger($curlHandle)->debug(__FUNCTION__);
-        }
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
         $response = null;
         try {
@@ -189,10 +176,6 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
 
             // Get status.
             $responseCode = $this->getResponseCode($curlHandle);
-
-            if ($this->configuration->enableDebugMode) {
-                $this->getLogger($curlHandle)->debug(sprintf('Response code: %d.', $responseCode));
-            }
 
             // Create response.
             $response = $this->responseFactory->createResponse($responseCode);
@@ -217,6 +200,8 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
      */
     public function headerCallback(CurlHandle $curlHandle, string $headerData): int
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         // Keep track of redirects and reset headers between each redirect
         $this->handleRedirects($curlHandle);
 
@@ -235,6 +220,8 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
 
     public function reset(): bool
     {
+        $this->logIfDebug(self::LOG_CHANNEL, __FUNCTION__);
+
         $this->loggers = [];
 
         $this->responseHeaders = [];

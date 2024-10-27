@@ -7,6 +7,7 @@ namespace WebServCo\Http\Client\Service\cURL;
 use CurlHandle;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Throwable;
 use WebServCo\Http\Client\Contract\Service\cURL\CurlServiceInterface;
 use WebServCo\Http\Client\Exception\ClientException;
 
@@ -14,9 +15,10 @@ use function array_key_exists;
 use function curl_getinfo;
 use function fclose;
 use function rewind;
+use function sprintf;
 use function stream_get_contents;
 
-abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService implements CurlServiceInterface
+abstract class AbstractCurlLoggerService implements CurlServiceInterface
 {
     /**
      * List of debug streams, by cURL handle.
@@ -50,7 +52,10 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
          * Seems more parameters are available, but would have to be called one by one:
          * https://www.php.net/manual/en/function.curl-getinfo.php
          */
-        $this->getLogger($curlHandle)->debug('curl_getinfo', ['curl_getinfo' => curl_getinfo($curlHandle)]);
+        $this->getLogger($this->getHandleIdentifier($curlHandle))->debug(
+            'curl_getinfo',
+            ['curl_getinfo' => curl_getinfo($curlHandle)],
+        );
 
         return true;
     }
@@ -62,7 +67,7 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
         if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
             throw new ClientException('Error retrieving locations data.');
         }
-        $this->getLogger($curlHandle)->debug(
+        $this->getLogger($this->getHandleIdentifier($curlHandle))->debug(
             'locations',
             ['locations' => $this->responseLocations[$handleIdentifier]],
         );
@@ -72,7 +77,7 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
 
     protected function logRequest(CurlHandle $curlHandle, RequestInterface $request): bool
     {
-        $this->getLogger($curlHandle)->debug(
+        $this->getLogger($this->getHandleIdentifier($curlHandle))->debug(
             'request',
             [
                 'request' => [
@@ -93,7 +98,7 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
             return false;
         }
 
-        $this->getLogger($curlHandle)->debug(
+        $this->getLogger($this->getHandleIdentifier($curlHandle))->debug(
             'response',
             [
                 'response' => [
@@ -121,7 +126,20 @@ abstract class AbstractCurlLoggerService extends AbstractCurlExceptionService im
         if ($stderr === false) {
             throw new ClientException('Error retrieving debug output data.');
         }
-        $this->getLogger($curlHandle)->debug('stderr', ['stderr' => $stderr]);
+        $this->getLogger($this->getHandleIdentifier($curlHandle))->debug('stderr', ['stderr' => $stderr]);
+
+        return true;
+    }
+
+    protected function logThrowable(?CurlHandle $curlHandle, Throwable $throwable): bool
+    {
+        $channel = $curlHandle !== null
+            ? $this->getHandleIdentifier($curlHandle)
+            : self::LOG_CHANNEL;
+        $this->getLogger($channel)->error(
+            sprintf('Error: "%s"', $throwable->getMessage()),
+            ['throwable' => $throwable],
+        );
 
         return true;
     }

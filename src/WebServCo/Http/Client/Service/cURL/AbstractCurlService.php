@@ -10,10 +10,11 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
-use Throwable;
 use WebServCo\Http\Client\Contract\Service\cURL\CurlServiceInterface;
 use WebServCo\Http\Client\DataTransfer\CurlServiceConfiguration;
 use WebServCo\Http\Client\Exception\ClientException;
+use WebServCo\Http\Client\Traits\CurlExceptionTrait;
+use WebServCo\Http\Client\Traits\DebugLogTrait;
 use WebServCo\Log\Contract\LoggerFactoryInterface;
 
 use function array_key_exists;
@@ -53,6 +54,9 @@ use const CURLOPT_VERBOSE;
 
 abstract class AbstractCurlService extends AbstractCurlLoggerService implements CurlServiceInterface
 {
+    use CurlExceptionTrait;
+    use DebugLogTrait;
+
     /**
      * List of loggers, by cURL handle.
      *
@@ -88,6 +92,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     protected function getResponseCode(CurlHandle $curlHandle): int
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         $responseCode = (int) curl_getinfo($curlHandle, CURLINFO_RESPONSE_CODE);
         if ($responseCode === 0) {
             throw new ClientException('Empty response status code (session not executed?).');
@@ -98,6 +104,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
 
     protected function handleDebugAfterExecution(CurlHandle $curlHandle, ?ResponseInterface $response): bool
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         if (!$this->configuration->enableDebugMode) {
             return false;
         }
@@ -123,6 +131,9 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     protected function handleHandle(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
         $curlHandle = $this->addHandleIdentifier($curlHandle);
+
+        // Log here because handleIdentifier is set above.
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
         $request = $this->handleRequestBody($request);
 
@@ -154,6 +165,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     protected function handleRedirects(CurlHandle $curlHandle): bool
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         $handleIdentifier = $this->getHandleIdentifier($curlHandle);
 
         // Get current value
@@ -191,6 +204,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     protected function handleResponseError(CurlHandle $curlHandle): null
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         $errorNumber = curl_errno($curlHandle);
         if ($errorNumber === 0) {
             return null;
@@ -199,18 +214,10 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         throw $this->createExceptionFromErrorCode($errorNumber);
     }
 
-    protected function logThrowable(?CurlHandle $curlHandle, Throwable $throwable): bool
-    {
-        $this->getLogger($curlHandle)->error(
-            sprintf('Error: "%s"', $throwable->getMessage()),
-            ['throwable' => $throwable],
-        );
-
-        return true;
-    }
-
     protected function setResponseBody(ResponseInterface $response, ?string $responseContent): ResponseInterface
     {
+        $this->logIfDebug(self::LOG_CHANNEL, __FUNCTION__);
+
         /**
          * Response content must be a string.
          * Even in the event of a 204 response, and empty string is used.
@@ -240,6 +247,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     protected function setResponseHeaders(CurlHandle $curlHandle, ResponseInterface $response): ResponseInterface
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         $handleIdentifier = $this->getHandleIdentifier($curlHandle);
         foreach ($this->responseHeaders[$handleIdentifier] as $name => $values) {
             // Phan error on next line, see method docblock.
@@ -257,6 +266,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function addHandleIdentifier(CurlHandle $curlHandle): CurlHandle
     {
+        $this->logIfDebug(self::LOG_CHANNEL, __FUNCTION__);
+
         curl_setopt($curlHandle, CURLOPT_PRIVATE, str_shuffle(md5(microtime())));
 
         return $curlHandle;
@@ -270,6 +281,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function createRequestHeadersArray(RequestInterface $request): array
     {
+        $this->logIfDebug(self::LOG_CHANNEL, __FUNCTION__);
+
         $headers = [];
         foreach ($request->getHeaders() as $name => $values) {
             if ($name === 'Accept-Encoding') {
@@ -288,6 +301,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
 
     private function getLastRedirectIndex(string $handleIdentifier): ?int
     {
+        $this->logIfDebug(self::LOG_CHANNEL, sprintf('%s: %s', __FUNCTION__, $handleIdentifier));
+
         if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
             return null;
         }
@@ -297,6 +312,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
 
     private function handleDebugBeforeExecution(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         if (!$this->configuration->enableDebugMode) {
             return $curlHandle;
         }
@@ -330,6 +347,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function handleRequestBody(RequestInterface $request): RequestInterface
     {
+        $this->logIfDebug(self::LOG_CHANNEL, __FUNCTION__);
+
         $body = (string) $request->getBody();
         // Handle "Content-Length" header
         if (!$request->hasHeader('Content-Length')) {
@@ -349,6 +368,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function handleRequestMethod(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         $method = $request->getMethod();
         // ""A custom request method to use instead of "GET" or "HEAD" when doing a HTTP request."
         curl_setopt($curlHandle, CURLOPT_CUSTOMREQUEST, $method);
@@ -385,6 +406,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function setRequestHeaders(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         if ($request->hasHeader('Accept-Encoding')) {
             /**
              * Set "Accept-Encoding" header.
@@ -421,6 +444,8 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      */
     private function setRequestOptions(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
     {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
         curl_setopt_array(
             $curlHandle,
             [

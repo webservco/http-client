@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace WebServCo\Http\Client\Service\cURL;
+namespace WebServCo\Http\Client\Traits;
 
 use Throwable;
 use WebServCo\Http\Client\Exception\ClientException;
 
 use function curl_strerror;
 
-abstract class AbstractCurlExceptionService
+trait CurlExceptionTrait
 {
     /**
      * Create exception object based on status code.

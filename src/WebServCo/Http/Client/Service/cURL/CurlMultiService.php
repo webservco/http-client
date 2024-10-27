@@ -13,6 +13,7 @@ use Throwable;
 use WebServCo\Http\Client\Contract\Service\cURL\CurlMultiServiceInterface;
 use WebServCo\Http\Client\Contract\Service\cURL\CurlServiceInterface;
 use WebServCo\Http\Client\Exception\ClientException;
+use WebServCo\Http\Client\Traits\CurlExceptionTrait;
 
 use function array_key_exists;
 use function array_keys;
@@ -26,12 +27,17 @@ use function curl_multi_remove_handle;
 use function curl_multi_select;
 use function curl_multi_strerror;
 use function is_int;
+use function sprintf;
 
 use const CURLE_OK;
 use const CURLM_OK;
 
-final class CurlMultiService extends AbstractCurlExceptionService implements CurlMultiServiceInterface
+final class CurlMultiService implements CurlMultiServiceInterface
 {
+    use CurlExceptionTrait;
+
+    private const string ERROR_MULTI_HANDLE_NULL = 'Multi handle not initialized.';
+
     /**
      * Array of cURL handles exceptions.
      * Key: handleIdentifier
@@ -52,20 +58,25 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
 
     public function __construct(private CurlServiceInterface $curlService)
     {
+        $this->logDebug(__FUNCTION__);
     }
 
     public function createHandle(RequestInterface $request): string
     {
+        $this->logDebug(__FUNCTION__);
+
         if ($this->curlMultiHandle === null) {
             /**
              * Create the multiple cURL handle.
              * "Allows the processing of multiple cURL handles asynchronously."
              */
             $this->curlMultiHandle = curl_multi_init();
+            $this->logDebug('No pre-existing curlMultiHandle, created now.');
         }
 
         $handle = $this->curlService->createHandle($request);
         $handleIdentifier = $this->curlService->getHandleIdentifier($handle);
+        $this->logDebug(sprintf('Created curlHandle with id "%s"', $handleIdentifier));
 
         $this->curlHandles[$handleIdentifier] = $handle;
 
@@ -77,18 +88,19 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
 
     public function executeSessions(): bool
     {
-        if ($this->curlService->getConfiguration()->enableDebugMode) {
-            $this->curlService->getLogger(null)->debug(__FUNCTION__);
-        }
+        $this->logDebug(__FUNCTION__);
 
         // Validate
         if ($this->curlMultiHandle === null) {
-            throw new ClientException('Multi handle not initialized.');
+            $this->logError(self::ERROR_MULTI_HANDLE_NULL);
+
+            throw new ClientException(self::ERROR_MULTI_HANDLE_NULL);
         }
 
         // Execute the multi handle
         $stillRunning = 0;
         do {
+            $this->logDebug(sprintf('stillRunning: "%d"', $stillRunning));
             /**
              * "Run the sub-connections of the current cURL handle".
              * "Processes each of the handles in the stack.
@@ -99,6 +111,7 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
              * even when this function returns CURLM_OK."
              */
             $statusCode = curl_multi_exec($this->curlMultiHandle, $stillRunning);
+
             $this->handleSessionsExecutionStatusCode($statusCode);
 
             /**
@@ -120,6 +133,8 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
              * - handle errors promptly as they happen.
              */
             $this->handleSessionsExecutionIndividualErrors();
+
+            $this->logDebug(sprintf('stillRunning: "%d"', $stillRunning));
         } while ($stillRunning > 0);
 
         /**
@@ -135,15 +150,17 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
 
     public function getResponse(string $handleIdentifier): ResponseInterface
     {
-        if ($this->curlService->getConfiguration()->enableDebugMode) {
-            $this->curlService->getLogger(null)->debug(__FUNCTION__);
-        }
+        $this->logDebug(sprintf('%s: %s', __FUNCTION__, $handleIdentifier));
 
         // Validate
         if ($this->curlMultiHandle === null) {
-            throw new ClientException('Multi handle not initialized.');
+            $this->logError(self::ERROR_MULTI_HANDLE_NULL);
+
+            throw new ClientException(self::ERROR_MULTI_HANDLE_NULL);
         }
         if (!array_key_exists($handleIdentifier, $this->curlHandles)) {
+            $this->logError(sprintf('Handle not found: "%s"', $handleIdentifier));
+
             throw new ClientException('Handle not found.');
         }
 
@@ -151,6 +168,8 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
          * Check for error during multi execution, for this specific handle.
          */
         if (array_key_exists($handleIdentifier, $this->curlHandleExceptions)) {
+            $this->logError('Exception happened during execution of handle, throwing.');
+
             throw $this->curlHandleExceptions[$handleIdentifier];
         }
 
@@ -165,6 +184,7 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
         // "Remove a multi handle from a set of cURL handles"
         curl_multi_remove_handle($this->curlMultiHandle, $this->curlHandles[$handleIdentifier]);
         unset($this->curlHandles[$handleIdentifier]);
+        $this->logDebug('Removed handle from curlMultiHandle and local curlHandles');
 
         return $response;
     }
@@ -174,20 +194,18 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
      */
     public function iterateResponse(): Generator
     {
-        if ($this->curlService->getConfiguration()->enableDebugMode) {
-            $this->curlService->getLogger(null)->debug(__FUNCTION__);
-        }
+        $this->logDebug(__FUNCTION__);
 
         foreach (array_keys($this->curlHandles) as $handleIdentifier) {
+            $this->logDebug('Yield response.');
+
             yield $this->getResponse($handleIdentifier);
         }
     }
 
     public function reset(): bool
     {
-        if ($this->curlService->getConfiguration()->enableDebugMode) {
-            $this->curlService->getLogger(null)->debug(__FUNCTION__);
-        }
+        $this->logDebug(__FUNCTION__);
 
         // Reset (local).
 
@@ -204,6 +222,20 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
         return true;
     }
 
+    private function addCurlHandleException(int $code, CurlHandle $curlHandle): bool
+    {
+        $this->logDebug(__FUNCTION__);
+
+        $handleIdentifier = $this->curlService->getHandleIdentifier($curlHandle);
+
+        // Reminder: `result` is a `CURLE_` code, depite coming from `curl_multi_info_read`.
+        $this->curlHandleExceptions[$handleIdentifier] = $this->createExceptionFromErrorCode($code);
+
+        $this->logDebug('Individual error happened, added to list.');
+
+        return true;
+    }
+
     /**
      * Create exception object based on status code.
      *
@@ -211,6 +243,8 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
      */
     private function createExceptionFromMultiErrorCode(int $code): Throwable
     {
+        $this->logDebug(__FUNCTION__);
+
         $errorMessage = curl_multi_strerror($code);
 
         return new ClientException($errorMessage ?? (string) $code, $code);
@@ -222,6 +256,8 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
      */
     private function handleSessionsExecutionIndividualError(array $multiInfo): bool
     {
+        $this->logDebug(__FUNCTION__);
+
         if (!array_key_exists('result', $multiInfo)) {
             throw new ClientException('Error parsing multi info.');
         }
@@ -235,24 +271,25 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
             throw new ClientException('Error parsing multi info.');
         }
 
-        // Reminder: `result` is a `CURLE_` code, depite coming from `curl_multi_info_read`.
+        // Reminder: `result` is a `CURLE_` code, despite coming from `curl_multi_info_read`.
         if ($multiInfo['result'] === CURLE_OK) {
-            // No error, nothing to do.
+            $this->logDebug('No individual error.');
+
             return false;
         }
 
-        $handleIdentifier = $this->curlService->getHandleIdentifier($multiInfo['handle']);
-        // Reminder: `result` is a `CURLE_` code, depite coming from `curl_multi_info_read`.
-        $this->curlHandleExceptions[$handleIdentifier] = $this->createExceptionFromErrorCode($multiInfo['result']);
-
-        return true;
+        return $this->addCurlHandleException($multiInfo['result'], $multiInfo['handle']);
     }
 
     private function handleSessionsExecutionIndividualErrors(): bool
     {
+        $this->logDebug(__FUNCTION__);
+
         // Validate
         if ($this->curlMultiHandle === null) {
-            throw new ClientException('Multi handle not initialized.');
+            $this->logError(self::ERROR_MULTI_HANDLE_NULL);
+
+            throw new ClientException(self::ERROR_MULTI_HANDLE_NULL);
         }
 
         /**
@@ -270,9 +307,11 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
 
     private function handleSessionsExecutionGeneralError(): bool
     {
+        $this->logDebug(__FUNCTION__);
+
         // Validate
         if ($this->curlMultiHandle === null) {
-            throw new ClientException('Multi handle not initialized.');
+            throw new ClientException(self::ERROR_MULTI_HANDLE_NULL);
         }
 
         /**
@@ -280,6 +319,8 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
          */
         $errorNumber = curl_multi_errno($this->curlMultiHandle);
         if ($errorNumber !== 0) {
+            $this->logError(sprintf('errorNumber: %d', $errorNumber));
+
             throw $this->createExceptionFromMultiErrorCode($errorNumber);
         }
 
@@ -288,10 +329,26 @@ final class CurlMultiService extends AbstractCurlExceptionService implements Cur
 
     private function handleSessionsExecutionStatusCode(int $statusCode): bool
     {
+        $this->logDebug(sprintf('%s: %d', __FUNCTION__, $statusCode));
+
         if ($statusCode !== CURLM_OK) {
             // General (multi) error, not related to individual handle, so ok to throw.
             throw $this->createExceptionFromMultiErrorCode($statusCode);
         }
+
+        return true;
+    }
+
+    private function logDebug(string $message): bool
+    {
+        $this->curlService->logIfDebug(CurlServiceInterface::LOG_CHANNEL, $message);
+
+        return true;
+    }
+
+    private function logError(string $message): bool
+    {
+        $this->curlService->getLogger(CurlServiceInterface::LOG_CHANNEL)->error($message);
 
         return true;
     }
