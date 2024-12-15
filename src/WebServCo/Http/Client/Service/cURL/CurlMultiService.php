@@ -100,7 +100,6 @@ final class CurlMultiService implements CurlMultiServiceInterface
         // Execute the multi handle
         $stillRunning = 0;
         do {
-            $this->logDebug(sprintf('stillRunning: "%d"', $stillRunning));
             /**
              * "Run the sub-connections of the current cURL handle".
              * "Processes each of the handles in the stack.
@@ -133,8 +132,6 @@ final class CurlMultiService implements CurlMultiServiceInterface
              * - handle errors promptly as they happen.
              */
             $this->handleSessionsExecutionIndividualErrors();
-
-            $this->logDebug(sprintf('stillRunning: "%d"', $stillRunning));
         } while ($stillRunning > 0);
 
         /**

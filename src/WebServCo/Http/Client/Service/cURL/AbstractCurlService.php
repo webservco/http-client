@@ -23,9 +23,7 @@ use function curl_errno;
 use function curl_getinfo;
 use function curl_setopt;
 use function curl_setopt_array;
-use function fopen;
 use function implode;
-use function is_resource;
 use function is_string;
 use function md5;
 use function microtime;
@@ -47,10 +45,8 @@ use const CURLOPT_NOBODY;
 use const CURLOPT_POSTFIELDS;
 use const CURLOPT_PRIVATE;
 use const CURLOPT_RETURNTRANSFER;
-use const CURLOPT_STDERR;
 use const CURLOPT_TIMEOUT;
 use const CURLOPT_URL;
-use const CURLOPT_VERBOSE;
 
 abstract class AbstractCurlService extends AbstractCurlLoggerService implements CurlServiceInterface
 {
@@ -79,11 +75,12 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     protected array $responseHeaders = [];
 
     public function __construct(
-        protected CurlServiceConfiguration $configuration,
+        CurlServiceConfiguration $configuration,
         protected LoggerFactoryInterface $loggerFactory,
         protected ResponseFactoryInterface $responseFactory,
         private StreamFactoryInterface $streamFactory,
     ) {
+        parent::__construct($configuration);
     }
 
     /**
@@ -310,38 +307,6 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         return array_key_last($this->responseLocations[$handleIdentifier]);
     }
 
-    private function handleDebugBeforeExecution(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
-    {
-        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
-
-        if (!$this->configuration->enableDebugMode) {
-            return $curlHandle;
-        }
-
-        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
-        // Create a stream where cURL should write errors
-        // temporary file/memory wrapper; if bigger than 5MB will be written to temp file.
-        $resource = fopen('php://temp/maxmemory:' . (5 * 1_024 * 1_024), 'w');
-        if (!is_resource($resource)) {
-            throw new ClientException('Error creating debug output location.');
-        }
-        $this->debugStderr[$handleIdentifier] = $resource;
-        // Set cURl debug options
-        // "An alternative location to output errors to instead of STDERR."
-        curl_setopt($curlHandle, CURLOPT_STDERR, $this->debugStderr[$handleIdentifier]);
-        /**
-         * "true to output verbose information.
-         * Writes output to STDERR, or the file specified using CURLOPT_STDERR."
-         * Note: this does not work when CURLINFO_HEADER_OUT is set: https://bugs.php.net/bug.php?id=65348
-         */
-        curl_setopt($curlHandle, CURLOPT_VERBOSE, true);
-
-        // Log request.
-        $this->logRequest($curlHandle, $request);
-
-        return $curlHandle;
-    }
-
     /**
      * Make sure request contains all the required data.
      */
@@ -371,6 +336,9 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
         $method = $request->getMethod();
+        if ($method === '') {
+            throw new ClientException('Invalid request method.');
+        }
         // ""A custom request method to use instead of "GET" or "HEAD" when doing a HTTP request."
         curl_setopt($curlHandle, CURLOPT_CUSTOMREQUEST, $method);
 
@@ -409,13 +377,17 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
         if ($request->hasHeader('Accept-Encoding')) {
+            $acceptEncoding = $request->getHeaderLine('Accept-Encoding');
+            if ($acceptEncoding === '') {
+                throw new ClientException('Invalid Accept-Encoding header.');
+            }
             /**
              * Set "Accept-Encoding" header.
              * Do in this way instead of manual header, so that the response is automatically decoded.
              * Leave empty string, cURL will list all supported.
              * "https://php.watch/articles/curl-php-accept-encoding-compression"
              */
-            curl_setopt($curlHandle, CURLOPT_ACCEPT_ENCODING, $request->getHeaderLine('Accept-Encoding'));
+            curl_setopt($curlHandle, CURLOPT_ACCEPT_ENCODING, $acceptEncoding);
         }
 
         /**

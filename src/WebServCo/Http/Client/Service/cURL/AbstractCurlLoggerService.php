@@ -9,14 +9,21 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
 use WebServCo\Http\Client\Contract\Service\cURL\CurlServiceInterface;
+use WebServCo\Http\Client\DataTransfer\CurlServiceConfiguration;
 use WebServCo\Http\Client\Exception\ClientException;
 
 use function array_key_exists;
 use function curl_getinfo;
+use function curl_setopt;
 use function fclose;
+use function fopen;
+use function is_resource;
 use function rewind;
 use function sprintf;
 use function stream_get_contents;
+
+use const CURLOPT_STDERR;
+use const CURLOPT_VERBOSE;
 
 abstract class AbstractCurlLoggerService implements CurlServiceInterface
 {
@@ -45,6 +52,42 @@ abstract class AbstractCurlLoggerService implements CurlServiceInterface
      */
     protected array $responseLocations = [];
 
+    public function __construct(protected CurlServiceConfiguration $configuration)
+    {
+    }
+
+    protected function handleDebugBeforeExecution(CurlHandle $curlHandle, RequestInterface $request): CurlHandle
+    {
+        $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
+
+        if (!$this->configuration->enableDebugMode) {
+            return $curlHandle;
+        }
+
+        $handleIdentifier = $this->getHandleIdentifier($curlHandle);
+        // Create a stream where cURL should write errors
+        // temporary file/memory wrapper; if bigger than 5MB will be written to temp file.
+        $resource = fopen('php://temp/maxmemory:' . (5 * 1_024 * 1_024), 'w');
+        if (!is_resource($resource)) {
+            throw new ClientException('Error creating debug output location.');
+        }
+        $this->debugStderr[$handleIdentifier] = $resource;
+        // Set cURl debug options
+        // "An alternative location to output errors to instead of STDERR."
+        curl_setopt($curlHandle, CURLOPT_STDERR, $this->debugStderr[$handleIdentifier]);
+        /**
+         * "true to output verbose information.
+         * Writes output to STDERR, or the file specified using CURLOPT_STDERR."
+         * Note: this does not work when CURLINFO_HEADER_OUT is set: https://bugs.php.net/bug.php?id=65348
+         */
+        curl_setopt($curlHandle, CURLOPT_VERBOSE, true);
+
+        // Log request.
+        $this->logRequest($curlHandle, $request);
+
+        return $curlHandle;
+    }
+
     protected function logInfo(CurlHandle $curlHandle): bool
     {
         /**
@@ -65,7 +108,8 @@ abstract class AbstractCurlLoggerService implements CurlServiceInterface
         $handleIdentifier = $this->getHandleIdentifier($curlHandle);
 
         if (!array_key_exists($handleIdentifier, $this->responseLocations)) {
-            throw new ClientException('Error retrieving locations data.');
+            // It is possible there are no locations, eg. when a timeout occurs.
+            return false;
         }
         $this->getLogger($this->getHandleIdentifier($curlHandle))->debug(
             'locations',
