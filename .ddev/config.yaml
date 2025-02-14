@@ -16,13 +16,9 @@ corepack_enable: false
 
 # Custom configuration
 omit_containers: [db]
-# @todo: use php 8.4 when psalm supports it.
-php_version: "8.3"
+php_version: "8.4"
 timezone: Europe/Budapest
-# PHP 8.4 currently unsupported because ast extension is not yet available
-# https://github.com/ddev/ddev/issues/6755
-# Workaround: install via pecl .ddev/web-build/Dockerfile.ast
-# webimage_extra_packages: [php${DDEV_PHP_VERSION}-ast]
+webimage_extra_packages: [php-ast]
 webserver_type: apache-fpm
 
 # Key features of DDEV's config.yaml:
