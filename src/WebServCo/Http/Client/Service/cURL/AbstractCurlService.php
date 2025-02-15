@@ -383,11 +383,6 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
              * Do in this way instead of manual header, so that the response is automatically decoded.
              * Leave empty string, cURL will list all supported.
              * "https://php.watch/articles/curl-php-accept-encoding-compression"
-             *
-             * phpstan: "Parameter #3 $value of function curl_setopt expects non-empty-string|null, string given."
-             * However, empty string is acceptable and even needed in this situation (see notes above))
-             *
-             * @phpstan-ignore argument.type
              */
             curl_setopt($curlHandle, CURLOPT_ACCEPT_ENCODING, $acceptEncoding);
         }
