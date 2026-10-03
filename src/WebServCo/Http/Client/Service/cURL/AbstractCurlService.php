@@ -239,7 +239,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
         $handleIdentifier = $this->getHandleIdentifier($curlHandle);
-        foreach ($this->responseHeaders[$handleIdentifier] as $name => $values) {
+        foreach ($this->responseHeaders[$handleIdentifier] ?? [] as $name => $values) {
             // Phan error on next line, see method docblock.
             $response = $response->withHeader($name, implode(', ', $values));
         }
