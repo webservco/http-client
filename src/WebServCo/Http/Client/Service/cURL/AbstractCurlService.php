@@ -190,14 +190,6 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
      *
      * If session is executed and contains errors,
      * this creates an Exception object that can be thrown when response is accessed.
-     *
-     * Phan:
-     * "PhanCompatibleStandaloneType Cannot use null as a standalone type before php 8.2."
-     * However:
-     * - composer: 8.3
-     * - env where run: 8.3
-     *
-     * @suppress PhanCompatibleStandaloneType
      */
     protected function handleResponseError(CurlHandle $curlHandle): null
     {
