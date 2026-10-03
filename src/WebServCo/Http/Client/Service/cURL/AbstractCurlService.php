@@ -407,6 +407,11 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
     {
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
 
+        $url = $request->getUri()->__toString();
+        if ($url === '') {
+            throw new ClientException('Empty request URL.');
+        }
+
         curl_setopt_array(
             $curlHandle,
             [
@@ -434,7 +439,7 @@ abstract class AbstractCurlService extends AbstractCurlLoggerService implements 
                 // "The maximum number of seconds to allow cURL functions to execute."
                 CURLOPT_TIMEOUT => $this->configuration->timeout,
                 // "The URL to fetch. This can also be set when initializing a session with curl_init()."
-                CURLOPT_URL => $request->getUri()->__toString(),
+                CURLOPT_URL => $url,
             ],
         );
 
