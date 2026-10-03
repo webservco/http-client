@@ -6,6 +6,7 @@ namespace WebServCo\Http\Client\Service\cURL;
 
 use CurlHandle;
 use DateTimeImmutable;
+use Override;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
@@ -42,6 +43,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * @see interface method DockBlock
      */
+    #[Override]
     public function createHandle(RequestInterface $request): CurlHandle
     {
         $this->logIfDebug(self::LOG_CHANNEL, sprintf('%s: %s', __FUNCTION__, $request->getUri()));
@@ -66,6 +68,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * @see interface method DockBlock
      */
+    #[Override]
     public function executeCurlSession(CurlHandle $curlHandle): ?string
     {
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
@@ -105,6 +108,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
         }
     }
 
+    #[Override]
     public function getConfiguration(): CurlServiceConfiguration
     {
         return $this->configuration;
@@ -113,6 +117,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * @see interface method DockBlock
      */
+    #[Override]
     public function getHandleIdentifier(CurlHandle $curlHandle): string
     {
         $handleIdentifier = curl_getinfo($curlHandle, CURLINFO_PRIVATE);
@@ -131,6 +136,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * Get logger for specific cURL handle.
      */
+    #[Override]
     public function getLogger(string $channel): LoggerInterface
     {
         if (!array_key_exists($channel, $this->loggers)) {
@@ -159,6 +165,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * @see interface method DockBlock
      */
+    #[Override]
     public function getResponse(CurlHandle $curlHandle, ?string $responseContent): ResponseInterface
     {
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
@@ -198,6 +205,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
     /**
      * @see interface method DockBlock
      */
+    #[Override]
     public function headerCallback(CurlHandle $curlHandle, string $headerData): int
     {
         $this->logIfDebug($this->getHandleIdentifier($curlHandle), __FUNCTION__);
@@ -218,6 +226,7 @@ final class CurlService extends AbstractCurlService implements CurlServiceInterf
         return $headerDataLength;
     }
 
+    #[Override]
     public function reset(): bool
     {
         $this->logIfDebug(self::LOG_CHANNEL, __FUNCTION__);

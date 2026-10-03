@@ -7,6 +7,7 @@ namespace WebServCo\Http\Client\Service\cURL;
 use CurlHandle;
 use CurlMultiHandle;
 use Generator;
+use Override;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
@@ -61,6 +62,7 @@ final class CurlMultiService implements CurlMultiServiceInterface
         $this->logDebug(__FUNCTION__);
     }
 
+    #[Override]
     public function createHandle(RequestInterface $request): string
     {
         $this->logDebug(__FUNCTION__);
@@ -86,6 +88,7 @@ final class CurlMultiService implements CurlMultiServiceInterface
         return $handleIdentifier;
     }
 
+    #[Override]
     public function executeSessions(): bool
     {
         $this->logDebug(__FUNCTION__);
@@ -145,6 +148,7 @@ final class CurlMultiService implements CurlMultiServiceInterface
         return true;
     }
 
+    #[Override]
     public function getResponse(string $handleIdentifier): ResponseInterface
     {
         $this->logDebug(sprintf('%s: %s', __FUNCTION__, $handleIdentifier));
@@ -189,6 +193,7 @@ final class CurlMultiService implements CurlMultiServiceInterface
     /**
      * @return \Generator<\Psr\Http\Message\ResponseInterface>
      */
+    #[Override]
     public function iterateResponse(): Generator
     {
         $this->logDebug(__FUNCTION__);
@@ -200,6 +205,7 @@ final class CurlMultiService implements CurlMultiServiceInterface
         }
     }
 
+    #[Override]
     public function reset(): bool
     {
         $this->logDebug(__FUNCTION__);

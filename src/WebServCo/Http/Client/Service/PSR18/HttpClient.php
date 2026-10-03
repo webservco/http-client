@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace WebServCo\Http\Client\Service\PSR18;
 
+use Override;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -18,6 +19,7 @@ final class HttpClient implements ClientInterface
     {
     }
 
+    #[Override]
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
         $curlHandle = $this->curlService->createHandle($request);
