@@ -33,7 +33,7 @@
         "fig/http-message-util": "^1",
         "psr/http-client": "^1",
         "psr/http-factory": "^1",
-        "webservco/log": "^1"
+        "webservco/log": "^2"
     },
     "require-dev": {
         "pds/skeleton": "^1",
